@@ -1,18 +1,64 @@
-<main style="font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 16px;">
-  <h1>Mallamaseps App</h1>
-  <p>Aplicación cliente independiente (base scaffold).</p>
+<ng-container *ngIf="session; else noSession">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot">M</div>
+        <div>
+          <p class="brand-title">Mallamaseps</p>
+          <p class="brand-sub">Client App</p>
+        </div>
+      </div>
 
-  <section *ngIf="session; else noSession" style="padding: 12px; background: #f3f4f6; border-radius: 8px; margin-top: 16px;">
-    <p><strong>Usuario:</strong> {{ session?.user?.email }}</p>
-    <p><strong>Tenant:</strong> {{ session?.tenant?.name }}</p>
-    <p><strong>Rol:</strong> {{ session?.user?.role }}</p>
-    <button (click)="logout()" style="margin-top: 8px; padding: 8px 14px;">Cerrar sesión</button>
-  </section>
+      <nav class="menu">
+        <button [class.active]="active === 'home'" (click)="select('home')">Home</button>
 
-  <ng-template #noSession>
-    <section style="padding: 12px; background: #fff4e5; border-radius: 8px; margin-top: 16px;">
+        <p class="menu-group">Manage</p>
+        <button [class.active]="active === 'usage'" (click)="select('usage')">Usage</button>
+        <button [class.active]="active === 'api-keys'" (click)="select('api-keys')">API Keys</button>
+
+        <button [class.active]="active === 'billing'" (click)="select('billing')">Billing</button>
+      </nav>
+
+      <button class="logout" (click)="logout()">Logout</button>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <h1>{{ active === 'home' ? 'Home' : active === 'usage' ? 'Usage' : active === 'api-keys' ? 'API Keys' : 'Billing' }}</h1>
+        <div class="user">{{ session?.user?.email }}</div>
+      </header>
+
+      <section class="card" *ngIf="active === 'home'">
+        <h2>Welcome</h2>
+        <p>Tenant: <strong>{{ session?.tenant?.name }}</strong></p>
+        <p>Role: <strong>{{ session?.user?.role }}</strong></p>
+        <p>Domain: <strong>{{ session?.tenant?.domain }}</strong></p>
+      </section>
+
+      <section class="card" *ngIf="active === 'usage'">
+        <h2>Usage</h2>
+        <p>Vista base para consumo y métricas del cliente.</p>
+      </section>
+
+      <section class="card" *ngIf="active === 'api-keys'">
+        <h2>API Keys</h2>
+        <p>Vista base para gestión de llaves API por tenant.</p>
+      </section>
+
+      <section class="card" *ngIf="active === 'billing'">
+        <h2>Billing</h2>
+        <p>Vista base para facturación del cliente.</p>
+      </section>
+    </main>
+  </div>
+</ng-container>
+
+<ng-template #noSession>
+  <main class="no-session">
+    <section>
+      <h1>Mallamaseps App</h1>
       <p>No hay sesión. Inicia en el portal auth.</p>
       <a href="http://localhost:4200/login">Ir a login</a>
     </section>
-  </ng-template>
-</main>
+  </main>
+</ng-template>

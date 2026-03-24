@@ -1,64 +1,66 @@
 <ng-container *ngIf="session; else noSession">
-  <div class="layout">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="dot">M</div>
+  <div class="min-h-screen bg-slate-950 text-slate-100 grid grid-cols-[240px_1fr]">
+    <aside class="border-r border-slate-800 bg-slate-950 p-4 flex flex-col gap-5">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-violet-600 grid place-items-center font-bold">M</div>
         <div>
-          <p class="brand-title">Mallamaseps</p>
-          <p class="brand-sub">Client App</p>
+          <p class="font-semibold leading-4">Mallamaseps</p>
+          <p class="text-xs text-slate-400">Client App</p>
         </div>
       </div>
 
-      <nav class="menu">
-        <button [class.active]="active === 'home'" (click)="select('home')">Home</button>
+      <nav class="flex flex-col gap-2 text-sm">
+        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'home' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('home')">Home</button>
 
-        <p class="menu-group">Manage</p>
-        <button [class.active]="active === 'usage'" (click)="select('usage')">Usage</button>
-        <button [class.active]="active === 'api-keys'" (click)="select('api-keys')">API Keys</button>
+        <p class="text-xs text-slate-500 uppercase tracking-wider px-3 pt-2">Manage</p>
+        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'usage' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('usage')">Usage</button>
+        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'api-keys' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('api-keys')">API Keys</button>
 
-        <button [class.active]="active === 'billing'" (click)="select('billing')">Billing</button>
+        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'billing' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('billing')">Billing</button>
       </nav>
 
-      <button class="logout" (click)="logout()">Logout</button>
+      <button class="mt-auto px-3 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm" (click)="logout()">Logout</button>
     </aside>
 
-    <main class="content">
-      <header class="topbar">
-        <h1>{{ active === 'home' ? 'Home' : active === 'usage' ? 'Usage' : active === 'api-keys' ? 'API Keys' : 'Billing' }}</h1>
-        <div class="user">{{ session?.user?.email }}</div>
+    <main class="p-6">
+      <header class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-semibold">
+          {{ active === 'home' ? 'Home' : active === 'usage' ? 'Usage' : active === 'api-keys' ? 'API Keys' : 'Billing' }}
+        </h1>
+        <div class="text-sm text-slate-400">{{ session?.user?.email }}</div>
       </header>
 
-      <section class="card" *ngIf="active === 'home'">
-        <h2>Welcome</h2>
-        <p>Tenant: <strong>{{ session?.tenant?.name }}</strong></p>
-        <p>Role: <strong>{{ session?.user?.role }}</strong></p>
-        <p>Domain: <strong>{{ session?.tenant?.domain }}</strong></p>
+      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'home'">
+        <h2 class="text-lg font-medium mb-3">Welcome</h2>
+        <p class="text-slate-300"><span class="text-slate-400">Tenant:</span> {{ session?.tenant?.name }}</p>
+        <p class="text-slate-300"><span class="text-slate-400">Role:</span> {{ session?.user?.role }}</p>
+        <p class="text-slate-300"><span class="text-slate-400">Domain:</span> {{ session?.tenant?.domain }}</p>
       </section>
 
-      <section class="card" *ngIf="active === 'usage'">
-        <h2>Usage</h2>
-        <p>Vista base para consumo y métricas del cliente.</p>
+      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'usage'">
+        <h2 class="text-lg font-medium mb-2">Usage</h2>
+        <p class="text-slate-300">Vista base para consumo y métricas del cliente.</p>
       </section>
 
-      <section class="card" *ngIf="active === 'api-keys'">
-        <h2>API Keys</h2>
-        <p>Vista base para gestión de llaves API por tenant.</p>
+      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'api-keys'">
+        <h2 class="text-lg font-medium mb-2">API Keys</h2>
+        <p class="text-slate-300">Vista base para gestión de llaves API por tenant.</p>
       </section>
 
-      <section class="card" *ngIf="active === 'billing'">
-        <h2>Billing</h2>
-        <p>Vista base para facturación del cliente.</p>
+      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'billing'">
+        <h2 class="text-lg font-medium mb-2">Billing</h2>
+        <p class="text-slate-300">Vista base para facturación del cliente.</p>
       </section>
     </main>
   </div>
 </ng-container>
 
 <ng-template #noSession>
-  <main class="no-session">
-    <section>
-      <h1>Mallamaseps App</h1>
-      <p>No hay sesión. Inicia en el portal auth.</p>
-      <a href="http://localhost:4200/login">Ir a login</a>
+  <main class="min-h-screen grid place-items-center bg-slate-100 p-4">
+    <section class="bg-white rounded-xl shadow px-6 py-5 max-w-sm w-full">
+      <h1 class="text-3xl font-bold text-slate-900 mb-3">Mallamaseps App</h1>
+      <p class="text-slate-600">No hay sesión. Inicia en el portal auth.</p>
+      <a class="text-indigo-600 hover:underline mt-3 inline-block" href="http://localhost:4200/login">Ir a login</a>
     </section>
   </main>
 </ng-template>

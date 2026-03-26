@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { BillingMetadata } from '../usage/billing-metadata.entity';
+import { BillingConfig } from './billing-config.entity';
 
 export interface DailyUsage {
   date: string;       // YYYY-MM-DD
@@ -46,16 +47,14 @@ export interface DailyDetail {
 
 @Injectable()
 export class BillingService {
-  // In-memory config (in production, store in a tenant_config table)
-  private budgetLimitPages = 200_000;
-  private alerts: UsageAlerts = { warningPercent: 80, criticalPercent: 100 };
-
   constructor(
     @InjectRepository(BillingMetadata)
     private readonly billingRepo: Repository<BillingMetadata>,
+    @InjectRepository(BillingConfig)
+    private readonly billingConfigRepo: Repository<BillingConfig>,
   ) {}
 
-  async getSummary(): Promise<BillingSummary> {
+  async getSummary(tenantId: string): Promise<BillingSummary> {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -91,6 +90,7 @@ export class BillingService {
 
     const totalDocuments = parseInt(totalsRaw.totalDocuments, 10) || 0;
     const totalPages = parseInt(totalsRaw.totalPages, 10) || 0;
+    const config = await this.getOrCreateConfig(tenantId);
 
     // Days until month resets
     const lastDay = new Date(year, month + 1, 0).getDate();
@@ -117,12 +117,15 @@ export class BillingService {
       totalDocuments,
       totalPages,
       budget: {
-        limit: this.budgetLimitPages,
+        limit: config.budgetLimitPages,
         used: totalPages,
-        ...this.calculateCost(totalPages, this.budgetLimitPages),
+        ...this.calculateCost(totalPages, config.budgetLimitPages),
         resetsIn,
       },
-      alerts: { ...this.alerts },
+      alerts: {
+        warningPercent: config.warningPercent,
+        criticalPercent: config.criticalPercent,
+      },
       daily,
     };
   }
@@ -154,8 +157,11 @@ export class BillingService {
     return { costPerPage, spent, budgetCap };
   }
 
-  async updateBudget(limit: number): Promise<BudgetInfo> {
-    this.budgetLimitPages = Math.max(1, limit);
+  async updateBudget(tenantId: string, limit: number): Promise<BudgetInfo> {
+    const config = await this.getOrCreateConfig(tenantId);
+    config.budgetLimitPages = Math.max(1, Number(limit || 1));
+    config.updatedAt = new Date();
+    await this.billingConfigRepo.save(config);
 
     // Recalculate with current month totals
     const now = new Date();
@@ -176,23 +182,47 @@ export class BillingService {
     const resetsIn = lastDay - now.getDate();
 
     return {
-      limit: this.budgetLimitPages,
+      limit: config.budgetLimitPages,
       used: totalPages,
-      ...this.calculateCost(totalPages, this.budgetLimitPages),
+      ...this.calculateCost(totalPages, config.budgetLimitPages),
       resetsIn,
     };
   }
 
-  updateAlerts(alerts: UsageAlerts): UsageAlerts {
-    this.alerts = {
-      warningPercent: Math.max(1, Math.min(100, alerts.warningPercent)),
-      criticalPercent: Math.max(1, Math.min(100, alerts.criticalPercent)),
-    };
-    // Ensure critical >= warning
-    if (this.alerts.criticalPercent < this.alerts.warningPercent) {
-      this.alerts.criticalPercent = this.alerts.warningPercent;
+  async updateAlerts(tenantId: string, alerts: UsageAlerts): Promise<UsageAlerts> {
+    const config = await this.getOrCreateConfig(tenantId);
+
+    config.warningPercent = Math.max(1, Math.min(100, Number(alerts.warningPercent || 80)));
+    config.criticalPercent = Math.max(1, Math.min(100, Number(alerts.criticalPercent || 100)));
+
+    if (config.criticalPercent < config.warningPercent) {
+      config.criticalPercent = config.warningPercent;
     }
-    return { ...this.alerts };
+
+    config.updatedAt = new Date();
+    await this.billingConfigRepo.save(config);
+
+    return {
+      warningPercent: config.warningPercent,
+      criticalPercent: config.criticalPercent,
+    };
+  }
+
+  private async getOrCreateConfig(tenantId: string): Promise<BillingConfig> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+
+    let config = await this.billingConfigRepo.findOne({ where: { tenantId: tid } });
+    if (config) return config;
+
+    config = this.billingConfigRepo.create({
+      tenantId: tid,
+      budgetLimitPages: 200_000,
+      warningPercent: 80,
+      criticalPercent: 100,
+      updatedAt: new Date(),
+    });
+
+    return this.billingConfigRepo.save(config);
   }
 
   async exportCsv(): Promise<string> {

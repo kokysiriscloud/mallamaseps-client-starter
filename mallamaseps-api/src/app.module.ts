@@ -7,6 +7,7 @@ import { UsageModule } from './usage/usage.module';
 import { BillingModule } from './billing/billing.module';
 import { RequestLog } from './usage/request-log.entity';
 import { BillingMetadata } from './usage/billing-metadata.entity';
+import { BillingConfig } from './billing/billing-config.entity';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { BillingMetadata } from './usage/billing-metadata.entity';
       password: process.env.DB_PASSWORD ?? 'postgres',
       database: process.env.DB_NAME ?? 'postgres',
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-      entities: [RequestLog, BillingMetadata],
+      entities: [RequestLog, BillingMetadata, BillingConfig],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
     UsageModule,

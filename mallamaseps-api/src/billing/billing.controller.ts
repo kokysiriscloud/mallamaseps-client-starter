@@ -1,14 +1,17 @@
-import { Controller, Get, Put, Body, Query, Res, Header } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Put, Body, Query, Res, Header, Req, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { BillingService } from './billing.service';
+import { AuthGuard } from '../auth.guard';
 
+@UseGuards(AuthGuard)
 @Controller('billing')
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
   @Get()
-  getSummary() {
-    return this.billingService.getSummary();
+  getSummary(@Req() req: Request & { user?: any }) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.getSummary(tenantId);
   }
 
   @Get('export')
@@ -22,13 +25,21 @@ export class BillingController {
   }
 
   @Put('budget')
-  updateBudget(@Body() body: { limit: number }) {
-    return this.billingService.updateBudget(body.limit);
+  updateBudget(
+    @Req() req: Request & { user?: any },
+    @Body() body: { limit: number },
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.updateBudget(tenantId, body.limit);
   }
 
   @Put('alerts')
-  updateAlerts(@Body() body: { warningPercent: number; criticalPercent: number }) {
-    return this.billingService.updateAlerts(body);
+  updateAlerts(
+    @Req() req: Request & { user?: any },
+    @Body() body: { warningPercent: number; criticalPercent: number },
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.updateAlerts(tenantId, body);
   }
 
   @Get('daily')

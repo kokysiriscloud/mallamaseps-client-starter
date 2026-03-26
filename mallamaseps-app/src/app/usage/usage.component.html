@@ -46,8 +46,7 @@
         </div>
 
         <p class="text-xs text-slate-500 mb-2">
-          Recarga automática en {{ autoRefreshSeconds }}s
-          <span *ngIf="lastUpdated"> · Última actualización: {{ lastUpdated | date:'yyyy-MM-dd HH:mm:ss':'-0500' }}</span>
+          <span *ngIf="lastUpdated">Última actualización: {{ lastUpdated | date:'yyyy-MM-dd HH:mm:ss':'-0500' }}</span>
         </p>
 
         <!-- Bar chart -->

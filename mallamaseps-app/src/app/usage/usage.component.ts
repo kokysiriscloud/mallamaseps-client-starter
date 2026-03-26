@@ -12,7 +12,11 @@ import { SessionService } from '../session.service';
 })
 export class UsageComponent implements OnInit, OnDestroy {
   private billingService = inject(BillingService);
-  private token = inject(SessionService).session?.token ?? '';
+  private sessionService = inject(SessionService);
+
+  private get token(): string {
+    return this.sessionService.session?.token ?? '';
+  }
 
   data: BillingSummary | null = null;
   loading = true;

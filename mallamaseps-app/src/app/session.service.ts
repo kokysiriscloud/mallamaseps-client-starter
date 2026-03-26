@@ -18,7 +18,9 @@ export interface Session {
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
-  readonly session: Session | null = this.load();
+  get session(): Session | null {
+    return this.load();
+  }
 
   private load(): Session | null {
     const raw = localStorage.getItem('siriscloud_auth_session');

@@ -9,11 +9,26 @@ export interface DailyUsage {
   pages: number;
 }
 
+export interface UsageAlerts {
+  warningPercent: number;
+  criticalPercent: number;
+}
+
+export interface BudgetInfo {
+  limit: number;
+  used: number;
+  spent: number;
+  budgetCap: number;
+  costPerPage: number;
+  resetsIn: number;
+}
+
 export interface BillingSummary {
   period: string;
   totalDocuments: number;
   totalPages: number;
-  budget: { limit: number; used: number; spent: number; budgetCap: number; costPerPage: number; resetsIn: number };
+  budget: BudgetInfo;
+  alerts: UsageAlerts;
   daily: DailyUsage[];
 }
 
@@ -31,6 +46,10 @@ export interface DailyDetail {
 
 @Injectable()
 export class BillingService {
+  // In-memory config (in production, store in a tenant_config table)
+  private budgetLimitPages = 200_000;
+  private alerts: UsageAlerts = { warningPercent: 80, criticalPercent: 100 };
+
   constructor(
     @InjectRepository(BillingMetadata)
     private readonly billingRepo: Repository<BillingMetadata>,
@@ -98,11 +117,12 @@ export class BillingService {
       totalDocuments,
       totalPages,
       budget: {
-        limit: 200000,         // page limit — placeholder
+        limit: this.budgetLimitPages,
         used: totalPages,
-        ...this.calculateCost(totalPages, 200000),
+        ...this.calculateCost(totalPages, this.budgetLimitPages),
         resetsIn,
       },
+      alerts: { ...this.alerts },
       daily,
     };
   }
@@ -132,6 +152,70 @@ export class BillingService {
     const costPerPage = totalPages <= TIER_1_LIMIT ? TIER_1_PRICE : TIER_2_PRICE;
 
     return { costPerPage, spent, budgetCap };
+  }
+
+  async updateBudget(limit: number): Promise<BudgetInfo> {
+    this.budgetLimitPages = Math.max(1, limit);
+
+    // Recalculate with current month totals
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const totalsRaw = await this.billingRepo
+      .createQueryBuilder('b')
+      .select('COALESCE(SUM(b.extractedPages), 0)', 'totalPages')
+      .where('b.createdAt >= :start AND b.createdAt <= :end', {
+        start: startOfMonth,
+        end: endOfMonth,
+      })
+      .getRawOne();
+
+    const totalPages = parseInt(totalsRaw.totalPages, 10) || 0;
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const resetsIn = lastDay - now.getDate();
+
+    return {
+      limit: this.budgetLimitPages,
+      used: totalPages,
+      ...this.calculateCost(totalPages, this.budgetLimitPages),
+      resetsIn,
+    };
+  }
+
+  updateAlerts(alerts: UsageAlerts): UsageAlerts {
+    this.alerts = {
+      warningPercent: Math.max(1, Math.min(100, alerts.warningPercent)),
+      criticalPercent: Math.max(1, Math.min(100, alerts.criticalPercent)),
+    };
+    // Ensure critical >= warning
+    if (this.alerts.criticalPercent < this.alerts.warningPercent) {
+      this.alerts.criticalPercent = this.alerts.warningPercent;
+    }
+    return { ...this.alerts };
+  }
+
+  async exportCsv(): Promise<string> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const records = await this.billingRepo.find({
+      where: {
+        createdAt: Between(startOfMonth, endOfMonth),
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    const header = 'id,document_id,filename,extracted_pages,created_at';
+    const rows = records.map((r) => {
+      const filename = (r.filename ?? '').replace(/"/g, '""');
+      const docId = (r.documentId ?? '').replace(/"/g, '""');
+      const date = r.createdAt?.toISOString() ?? '';
+      return `${r.id},"${docId}","${filename}",${r.extractedPages ?? 0},${date}`;
+    });
+
+    return [header, ...rows].join('\n');
   }
 
   async getDailyDetail(date: string, page = 1, limit = 20): Promise<DailyDetail> {

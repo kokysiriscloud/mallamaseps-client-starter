@@ -25,7 +25,18 @@
               <p class="text-2xl font-bold text-white">{{ data.totalDocuments | number }}</p>
             </div>
           </div>
-          <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
+            <button
+              type="button"
+              class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+              (click)="exportCsv()">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              Exportar CSV
+            </button>
+          </div>
         </div>
 
         <!-- Bar chart -->
@@ -134,8 +145,8 @@
           <div>
             <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">{{ data.period }} budget</p>
             <p class="text-2xl font-bold text-white mb-1">
-              ${{ data.budget.spent | number:'1.0-0' }}
-              <span class="text-base font-normal text-slate-500">/ ${{ data.budget.budgetCap | number:'1.0-0' }} COP</span>
+              {{ data.budget.spent | currency:'COP':'symbol-narrow':'1.0-0' }}
+              <span class="text-base font-normal text-slate-500">/ {{ data.budget.budgetCap | currency:'COP':'symbol-narrow':'1.0-0' }}</span>
             </p>
           </div>
           <button
@@ -160,7 +171,7 @@
           Se reinicia en {{ data.budget.resetsIn }} días.
         </p>
         <p class="text-xs text-slate-500 mt-1">
-          Tarifa actual: <span class="text-slate-300">${{ data.budget.costPerPage }} COP/pág</span>
+          Tarifa actual: <span class="text-slate-300">{{ data.budget.costPerPage | currency:'COP':'symbol-narrow':'1.0-0' }}/pág</span>
           <span class="text-slate-600 ml-1">({{ data.budget.used | number }} págs usadas)</span>
         </p>
         <p class="text-xs text-slate-500 mt-1">
@@ -169,12 +180,12 @@
 
         <div *ngIf="budgetEditing" class="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
           <label class="text-xs text-slate-500 uppercase tracking-wider">Nuevo límite de páginas</label>
-          <div class="flex items-center gap-2 mt-2">
-            <input
-              type="number"
-              min="1"
-              class="w-32 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              [(ngModel)]="budgetDraft" />
+          <input
+            type="number"
+            min="1"
+            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 mt-2"
+            [(ngModel)]="budgetDraft" />
+          <div class="flex items-center gap-2 mt-3">
             <button
               type="button"
               class="px-3 py-2 rounded-lg text-sm bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"

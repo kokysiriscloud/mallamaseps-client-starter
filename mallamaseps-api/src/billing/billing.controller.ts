@@ -1,4 +1,5 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Put, Body, Query, Res, Header } from '@nestjs/common';
+import type { Response } from 'express';
 import { BillingService } from './billing.service';
 
 @Controller('billing')
@@ -8,6 +9,26 @@ export class BillingController {
   @Get()
   getSummary() {
     return this.billingService.getSummary();
+  }
+
+  @Get('export')
+  @Header('Content-Type', 'text/csv')
+  async exportCsv(@Res() res: Response) {
+    const now = new Date();
+    const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+    res.setHeader('Content-Disposition', `attachment; filename="usage-${month}.csv"`);
+    const csv = await this.billingService.exportCsv();
+    res.send(csv);
+  }
+
+  @Put('budget')
+  updateBudget(@Body() body: { limit: number }) {
+    return this.billingService.updateBudget(body.limit);
+  }
+
+  @Put('alerts')
+  updateAlerts(@Body() body: { warningPercent: number; criticalPercent: number }) {
+    return this.billingService.updateAlerts(body);
   }
 
   @Get('daily')

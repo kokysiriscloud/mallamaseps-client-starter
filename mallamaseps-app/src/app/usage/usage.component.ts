@@ -108,6 +108,24 @@ export class UsageComponent implements OnInit {
     });
   }
 
+  exportCsv(): void {
+    this.billingService.exportCsv(this.token).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const now = new Date();
+        const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+        a.download = `usage-${month}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.error = 'No se pudo exportar el CSV.';
+      },
+    });
+  }
+
   selectDay(day: DailyUsage): void {
     if (day.documents === 0) return;
     if (this.selectedDay?.date === day.date) {

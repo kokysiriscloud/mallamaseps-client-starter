@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BillingService, BillingSummary, DailyUsage, DailyDetail, UsageAlerts } from '../billing/billing.service';
@@ -10,7 +10,7 @@ import { SessionService } from '../session.service';
   imports: [CommonModule, FormsModule],
   templateUrl: './usage.component.html',
 })
-export class UsageComponent implements OnInit {
+export class UsageComponent implements OnInit, OnDestroy {
   private billingService = inject(BillingService);
   private token = inject(SessionService).session?.token ?? '';
 
@@ -18,6 +18,11 @@ export class UsageComponent implements OnInit {
   loading = true;
   error: string | null = null;
   chartMax = 0;
+  autoRefreshSeconds = 30;
+  lastUpdated: Date | null = null;
+
+  private autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private autoRefreshCountdownTimer: ReturnType<typeof setInterval> | null = null;
 
   budgetEditing = false;
   budgetSaving = false;
@@ -34,12 +39,45 @@ export class UsageComponent implements OnInit {
   readonly detailLimit = 20;
 
   ngOnInit(): void {
+    this.reloadSummary();
+
+    this.autoRefreshTimer = setInterval(() => {
+      this.reloadSummary(true);
+    }, 30_000);
+
+    this.autoRefreshCountdownTimer = setInterval(() => {
+      this.autoRefreshSeconds = Math.max(0, this.autoRefreshSeconds - 1);
+    }, 1_000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.autoRefreshTimer) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
+
+    if (this.autoRefreshCountdownTimer) {
+      clearInterval(this.autoRefreshCountdownTimer);
+      this.autoRefreshCountdownTimer = null;
+    }
+  }
+
+  manualRefresh(): void {
+    this.reloadSummary();
+  }
+
+  private reloadSummary(silent = false): void {
+    if (!silent) this.loading = true;
+
     this.billingService.getSummary(this.token).subscribe({
       next: (d) => {
         const alerts = d.alerts ?? { warningPercent: 80, criticalPercent: 100 };
         this.data = { ...d, alerts };
         this.chartMax = Math.max(1, ...d.daily.map((r) => r.pages));
         this.loading = false;
+        this.error = null;
+        this.lastUpdated = new Date();
+        this.autoRefreshSeconds = 30;
       },
       error: () => {
         this.error = 'No se pudo cargar la información de consumo.';

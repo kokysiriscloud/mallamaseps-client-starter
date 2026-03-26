@@ -17,6 +17,11 @@ export class AppComponent {
 
   constructor() {
     this.bootstrapSession();
+    this.session = this.loadSessionFromStorage();
+
+    if (!this.session) {
+      window.location.href = this.authPortalUrl;
+    }
   }
 
   private bootstrapSession(): void {
@@ -31,6 +36,17 @@ export class AppComponent {
       } catch {
         // no-op
       }
+    }
+  }
+
+  private loadSessionFromStorage(): any {
+    const raw = localStorage.getItem('siriscloud_auth_session');
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
     }
   }
 

@@ -10,47 +10,30 @@
       </div>
 
       <nav class="flex flex-col gap-2 text-sm">
-        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'home' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('home')">Home</button>
+        <a routerLink="/home" routerLinkActive="bg-violet-900 text-white"
+           class="px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300">Home</a>
 
         <p class="text-xs text-slate-500 uppercase tracking-wider px-3 pt-2">Manage</p>
-        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'usage' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('usage')">Usage</button>
-        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'api-keys' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('api-keys')">API Keys</button>
-
-        <button class="text-left px-3 py-2 rounded-lg hover:bg-slate-800" [ngClass]="active === 'billing' ? 'bg-violet-900 text-white' : 'text-slate-300'" (click)="select('billing')">Billing</button>
+        <a routerLink="/usage" routerLinkActive="bg-violet-900 text-white"
+           class="px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300">Usage</a>
+        <a routerLink="/api-keys" routerLinkActive="bg-violet-900 text-white"
+           class="px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300">API Keys</a>
+        <a routerLink="/billing" routerLinkActive="bg-violet-900 text-white"
+           class="px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300">Billing</a>
       </nav>
 
-      <button class="mt-auto px-3 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm" (click)="logout()">Logout</button>
+      <button class="mt-auto px-3 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm" (click)="logout()">
+        Logout
+      </button>
     </aside>
 
     <main class="p-6">
       <header class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-semibold">
-          {{ active === 'home' ? 'Home' : active === 'usage' ? 'Usage' : active === 'api-keys' ? 'API Keys' : 'Billing' }}
-        </h1>
+        <h1 class="text-2xl font-semibold">{{ pageTitle }}</h1>
         <div class="text-sm text-slate-400">{{ session?.user?.email }}</div>
       </header>
 
-      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'home'">
-        <h2 class="text-lg font-medium mb-3">Welcome</h2>
-        <p class="text-slate-300"><span class="text-slate-400">Tenant:</span> {{ session?.tenant?.name }}</p>
-        <p class="text-slate-300"><span class="text-slate-400">Role:</span> {{ session?.user?.role }}</p>
-        <p class="text-slate-300"><span class="text-slate-400">Domain:</span> {{ session?.tenant?.domain }}</p>
-      </section>
-
-      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'usage'">
-        <h2 class="text-lg font-medium mb-2">Usage</h2>
-        <p class="text-slate-300">Vista base para consumo y métricas del cliente.</p>
-      </section>
-
-      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'api-keys'">
-        <h2 class="text-lg font-medium mb-2">API Keys</h2>
-        <p class="text-slate-300">Vista base para gestión de llaves API por tenant.</p>
-      </section>
-
-      <section class="rounded-xl border border-slate-800 bg-slate-900 p-5" *ngIf="active === 'billing'">
-        <h2 class="text-lg font-medium mb-2">Billing</h2>
-        <p class="text-slate-300">Vista base para facturación del cliente.</p>
-      </section>
+      <router-outlet />
     </main>
   </div>
 </ng-container>

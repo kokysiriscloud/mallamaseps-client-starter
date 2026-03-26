@@ -1,23 +1,23 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-
-type MenuKey = 'home' | 'usage' | 'api-keys' | 'billing';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
+import { SessionService } from './session.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.component.html',
 })
 export class AppComponent {
-  active: MenuKey = 'home';
-  session = this.bootstrapSession();
+  session = inject(SessionService).session;
+  private router = inject(Router);
 
-  select(key: MenuKey): void {
-    this.active = key;
+  constructor() {
+    this.bootstrapSession();
   }
 
-  private bootstrapSession(): any {
+  private bootstrapSession(): void {
     const query = new URLSearchParams(window.location.search);
     const incomingSession = query.get('session');
 
@@ -25,21 +25,19 @@ export class AppComponent {
       try {
         const decoded = atob(decodeURIComponent(incomingSession));
         localStorage.setItem('siriscloud_auth_session', decoded);
-        // Limpiar query param sensible
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch {
         // no-op
       }
     }
+  }
 
-    const raw = localStorage.getItem('siriscloud_auth_session');
-    if (!raw) return null;
-
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
+  get pageTitle(): string {
+    const url = this.router.url;
+    if (url.includes('usage')) return 'Usage';
+    if (url.includes('api-keys')) return 'API Keys';
+    if (url.includes('billing')) return 'Billing';
+    return 'Home';
   }
 
   logout(): void {

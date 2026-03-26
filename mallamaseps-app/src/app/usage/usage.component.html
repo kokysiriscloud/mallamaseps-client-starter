@@ -1,0 +1,183 @@
+<div *ngIf="loading" class="flex items-center gap-2 text-slate-400 text-sm">
+  <div class="w-4 h-4 rounded-full border-2 border-violet-500 border-t-transparent animate-spin"></div>
+  Cargando datos de consumo...
+</div>
+
+<div *ngIf="error" class="rounded-xl border border-red-800 bg-red-950 p-4 text-red-400 text-sm">
+  {{ error }}
+</div>
+
+<ng-container *ngIf="data && !loading">
+  <div class="grid grid-cols-[1fr_320px] gap-6">
+    <!-- ========== LEFT COLUMN — Chart + Detail + Stats ========== -->
+    <div class="flex flex-col gap-6">
+
+      <!-- Daily chart -->
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-8">
+            <div>
+              <p class="text-xs text-slate-500 uppercase tracking-wider">Total Páginas</p>
+              <p class="text-2xl font-bold text-white">{{ data.totalPages | number }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-slate-500 uppercase tracking-wider">Total Documentos</p>
+              <p class="text-2xl font-bold text-white">{{ data.totalDocuments | number }}</p>
+            </div>
+          </div>
+          <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
+        </div>
+
+        <!-- Bar chart -->
+        <div class="flex items-end gap-[2px] h-40 mt-2">
+          <button *ngFor="let day of data.daily" type="button"
+               class="flex-1 min-w-0 relative group h-full flex flex-col justify-end"
+               [class.cursor-pointer]="day.documents > 0"
+               (click)="selectDay(day)">
+            <div
+              class="w-full rounded-t transition-all duration-150"
+              [ngClass]="isSelected(day) ? 'bg-violet-400' : day.documents > 0 ? 'bg-violet-600 group-hover:bg-violet-400' : 'bg-slate-800'"
+              [style.height.%]="barHeight(day)">
+            </div>
+            <!-- Tooltip -->
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block
+                        bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs whitespace-nowrap z-10 shadow-lg pointer-events-none">
+              <p class="text-slate-300 font-medium">{{ dayLabel(day) }}</p>
+              <p class="text-slate-400">{{ day.pages | number }} págs · {{ day.documents | number }} docs</p>
+              <p *ngIf="day.documents > 0" class="text-violet-400 mt-0.5">Click para ver detalle</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- X-axis labels -->
+        <div class="flex justify-between mt-2 text-xs text-slate-600">
+          <span *ngIf="data.daily.length">{{ dayLabel(data.daily[0]) }}</span>
+          <span *ngIf="midDay() as mid">{{ dayLabel(mid) }}</span>
+          <span *ngIf="data.daily.length > 1">{{ dayLabel(data.daily[data.daily.length - 1]) }}</span>
+        </div>
+      </div>
+
+      <!-- ========== Daily detail panel ========== -->
+      <div *ngIf="selectedDay" class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-sm font-medium text-slate-200">{{ dayLabelLong(selectedDay) }}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              {{ selectedDay.documents | number }} documentos · {{ selectedDay.pages | number }} páginas
+            </p>
+          </div>
+          <button
+            class="text-slate-500 hover:text-slate-300 text-sm px-2 py-1 rounded hover:bg-slate-800"
+            (click)="closeDetail()">
+            Cerrar
+          </button>
+        </div>
+
+        <div *ngIf="detailLoading" class="flex items-center gap-2 text-slate-400 text-sm py-4">
+          <div class="w-3 h-3 rounded-full border-2 border-violet-500 border-t-transparent animate-spin"></div>
+          Cargando...
+        </div>
+
+        <ng-container *ngIf="detail && !detailLoading">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500 border-b border-slate-800">
+                <th class="pb-2 font-medium">#</th>
+                <th class="pb-2 font-medium">Archivo</th>
+                <th class="pb-2 font-medium text-right">Páginas</th>
+                <th class="pb-2 font-medium text-right">Hora</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of detail.records" class="border-b border-slate-800 last:border-0">
+                <td class="py-2 text-slate-500 text-xs">{{ r.id }}</td>
+                <td class="py-2 text-slate-200 text-xs truncate max-w-[260px]" [title]="r.filename ?? ''">
+                  {{ r.filename ?? '—' }}
+                </td>
+                <td class="py-2 text-right text-slate-300">{{ r.pages | number }}</td>
+                <td class="py-2 text-right text-slate-400 text-xs">{{ r.createdAt | date:'shortTime':'-0500' }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Pagination -->
+          <div *ngIf="detail.pagination.totalPages > 1"
+               class="flex items-center justify-between mt-4 pt-4 border-t border-slate-800">
+            <button
+              class="px-3 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="detail.pagination.page === 1"
+              (click)="loadDetail(detail.date, detail.pagination.page - 1)">
+              ← Anterior
+            </button>
+
+            <span class="text-xs text-slate-500">
+              {{ (detail.pagination.page - 1) * detail.pagination.limit + 1 }}–{{ detailEndRecord() }}
+              de {{ detail.pagination.total | number }}
+            </span>
+
+            <button
+              class="px-3 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              [disabled]="detail.pagination.page === detail.pagination.totalPages"
+              (click)="loadDetail(detail.date, detail.pagination.page + 1)">
+              Siguiente →
+            </button>
+          </div>
+        </ng-container>
+      </div>
+
+    </div>
+
+    <!-- ========== RIGHT COLUMN — Budget ========== -->
+    <div class="flex flex-col gap-6">
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">{{ data.period }} budget</p>
+        <p class="text-2xl font-bold text-white mb-1">
+          ${{ data.budget.spent | number:'1.0-0' }}
+          <span class="text-base font-normal text-slate-500">/ ${{ data.budget.budgetCap | number:'1.0-0' }} COP</span>
+        </p>
+
+        <!-- Progress bar -->
+        <div class="w-full h-2 bg-slate-800 rounded-full mt-3 mb-3 overflow-hidden">
+          <div
+            class="h-full rounded-full transition-all duration-500"
+            [ngClass]="budgetBarColor()"
+            [style.width.%]="budgetPercent()">
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-500">
+          Se reinicia en {{ data.budget.resetsIn }} días.
+        </p>
+        <p class="text-xs text-slate-500 mt-1">
+          Tarifa actual: <span class="text-slate-300">${{ data.budget.costPerPage }} COP/pág</span>
+          <span class="text-slate-600 ml-1">({{ data.budget.used | number }} págs usadas)</span>
+        </p>
+      </div>
+
+      <!-- Alerts -->
+      <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <h3 class="text-sm font-medium text-slate-300 mb-3">Alertas</h3>
+
+        <div class="flex items-center justify-between py-2 border-b border-slate-800">
+          <div class="flex items-center gap-2 text-sm text-slate-400">
+            <span class="w-5 h-5 rounded bg-slate-800 grid place-items-center text-xs text-slate-500">&#9993;</span>
+            80% usage alert
+          </div>
+          <span class="text-xs" [ngClass]="budgetPercent() >= 80 ? 'text-amber-400' : 'text-slate-600'">
+            {{ budgetPercent() >= 80 ? 'Triggered' : 'Pending' }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between py-2">
+          <div class="flex items-center gap-2 text-sm text-slate-400">
+            <span class="w-5 h-5 rounded bg-slate-800 grid place-items-center text-xs text-slate-500">&#9993;</span>
+            100% usage alert
+          </div>
+          <span class="text-xs" [ngClass]="budgetPercent() >= 100 ? 'text-red-400' : 'text-slate-600'">
+            {{ budgetPercent() >= 100 ? 'Triggered' : 'Pending' }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>

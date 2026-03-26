@@ -8,11 +8,17 @@ export interface DailyUsage {
   pages: number;
 }
 
+export interface UsageAlerts {
+  warningPercent: number;
+  criticalPercent: number;
+}
+
 export interface BillingSummary {
   period: string;
   totalDocuments: number;
   totalPages: number;
   budget: { limit: number; used: number; spent: number; budgetCap: number; costPerPage: number; resetsIn: number };
+  alerts: UsageAlerts;
   daily: DailyUsage[];
 }
 
@@ -38,6 +44,16 @@ export class BillingService {
   getSummary(token: string): Observable<BillingSummary> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
     return this.http.get<BillingSummary>(this.apiUrl, { headers });
+  }
+
+  updateBudget(token: string, limit: number): Observable<BillingSummary['budget']> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.put<BillingSummary['budget']>(`${this.apiUrl}/budget`, { limit }, { headers });
+  }
+
+  updateAlerts(token: string, alerts: UsageAlerts): Observable<UsageAlerts> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.put<UsageAlerts>(`${this.apiUrl}/alerts`, alerts, { headers });
   }
 
   getDailyDetail(token: string, date: string, page = 1, limit = 20): Observable<DailyDetail> {

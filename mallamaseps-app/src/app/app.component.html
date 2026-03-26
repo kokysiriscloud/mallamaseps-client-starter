@@ -22,15 +22,28 @@
            class="px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300">Billing</a>
       </nav>
 
-      <button class="mt-auto px-3 py-2 rounded-lg bg-red-800 hover:bg-red-700 text-white text-sm" (click)="logout()">
-        Logout
-      </button>
+      <div class="mt-auto"></div>
     </aside>
 
     <main class="p-6">
       <header class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-semibold">{{ pageTitle }}</h1>
-        <div class="text-sm text-slate-400">{{ session?.user?.email ?? '' }}</div>
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-slate-400">{{ session?.user?.email ?? '' }}</div>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            (click)="logout()"
+            title="Cerrar sesión"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <path d="M10 17l5-5-5-5" />
+              <path d="M15 12H3" />
+            </svg>
+            <span class="text-sm">Logout</span>
+          </button>
+        </div>
       </header>
 
       <router-outlet />

@@ -36,7 +36,7 @@ export class UsageComponent implements OnInit, OnDestroy {
   selectedDay: DailyUsage | null = null;
   detail: DailyDetail | null = null;
   detailLoading = false;
-  readonly detailLimit = 20;
+  readonly detailLimit = 10;
 
   ngOnInit(): void {
     this.reloadSummary();

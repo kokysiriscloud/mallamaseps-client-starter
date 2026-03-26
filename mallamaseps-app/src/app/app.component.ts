@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
 import { SessionService } from './session.service';
+import { environment } from './environment';
 
 @Component({
   selector: 'app-root',
@@ -11,6 +12,7 @@ import { SessionService } from './session.service';
 })
 export class AppComponent {
   session = inject(SessionService).session;
+  authPortalUrl = environment.authPortalUrl;
   private router = inject(Router);
 
   constructor() {
@@ -42,6 +44,6 @@ export class AppComponent {
 
   logout(): void {
     localStorage.removeItem('siriscloud_auth_session');
-    window.location.href = 'http://localhost:4200/login';
+    window.location.href = environment.authPortalUrl;
   }
 }

@@ -1,3 +1,155 @@
-<div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
-  <p class="text-slate-400 text-sm">Próximamente.</p>
+<!-- Tabs -->
+<div class="flex gap-6 border-b border-slate-800 mb-6">
+  <button
+    *ngFor="let tab of [['overview','Overview'], ['history','Historial'], ['preferences','Preferencias']]"
+    type="button"
+    class="pb-3 text-sm font-medium transition-colors"
+    [ngClass]="activeTab === tab[0]
+      ? 'text-white border-b-2 border-violet-500'
+      : 'text-slate-500 hover:text-slate-300'"
+    (click)="selectTab($any(tab[0]))">
+    {{ tab[1] }}
+  </button>
 </div>
+
+<!-- ==================== OVERVIEW TAB ==================== -->
+<ng-container *ngIf="activeTab === 'overview'">
+
+  <!-- Credit Balance -->
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-white mb-1">Pay as you go</h2>
+    <p class="text-xs text-slate-500 mb-4">Credit balance</p>
+    <p class="text-4xl font-bold text-white mb-5">
+      {{ credit.balance | currency:'COP':'symbol-narrow':'1.0-0' }}
+    </p>
+
+    <div class="flex flex-wrap gap-3">
+      <button type="button"
+        class="px-4 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 transition-colors">
+        Agregar crédito
+      </button>
+      <button type="button"
+        class="px-4 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:bg-slate-800 transition-colors">
+        Configurar recarga
+      </button>
+    </div>
+  </div>
+
+  <!-- Pricing -->
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-5 mb-6">
+    <h3 class="text-sm font-medium text-slate-300 mb-4">Tarifas vigentes</h3>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-500 border-b border-slate-800">
+          <th class="pb-2 font-medium">Rango</th>
+          <th class="pb-2 font-medium text-right">Precio por página</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let tier of pricingTiers" class="border-b border-slate-800 last:border-0">
+          <td class="py-3 text-slate-300">{{ tier.range }}</td>
+          <td class="py-3 text-right text-white font-semibold">
+            {{ tier.price | currency:'COP':'symbol-narrow':'1.0-0' }}/pág
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Quick links grid -->
+  <div class="grid grid-cols-2 gap-4">
+    <button type="button"
+      class="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900 p-5 text-left hover:border-slate-700 transition-colors group"
+      (click)="selectTab('history')">
+      <div class="w-11 h-11 rounded-lg bg-slate-800 grid place-items-center text-slate-400 group-hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-white">Historial de facturación</p>
+        <p class="text-xs text-slate-500">Ver facturas pasadas y actuales</p>
+      </div>
+    </button>
+
+    <button type="button"
+      class="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900 p-5 text-left hover:border-slate-700 transition-colors group"
+      (click)="selectTab('preferences')">
+      <div class="w-11 h-11 rounded-lg bg-slate-800 grid place-items-center text-slate-400 group-hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </div>
+      <div>
+        <p class="text-sm font-medium text-white">Preferencias</p>
+        <p class="text-xs text-slate-500">Gestionar información de facturación</p>
+      </div>
+    </button>
+  </div>
+</ng-container>
+
+<!-- ==================== HISTORY TAB ==================== -->
+<ng-container *ngIf="activeTab === 'history'">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h3 class="text-sm font-medium text-slate-300 mb-4">Facturas recientes</h3>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-500 border-b border-slate-800">
+          <th class="pb-2 font-medium">Factura</th>
+          <th class="pb-2 font-medium">Período</th>
+          <th class="pb-2 font-medium text-right">Monto</th>
+          <th class="pb-2 font-medium text-right">Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let inv of invoices" class="border-b border-slate-800 last:border-0">
+          <td class="py-3 text-slate-200 font-mono text-xs">{{ inv.id }}</td>
+          <td class="py-3 text-slate-400 text-xs">{{ inv.period }}</td>
+          <td class="py-3 text-right text-white font-semibold">
+            {{ inv.amount | currency:'COP':'symbol-narrow':'1.0-0' }}
+          </td>
+          <td class="py-3 text-right">
+            <span class="px-2 py-0.5 rounded-full text-xs font-medium" [ngClass]="statusClass(inv.status)">
+              {{ statusLabel(inv.status) }}
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</ng-container>
+
+<!-- ==================== PREFERENCES TAB ==================== -->
+<ng-container *ngIf="activeTab === 'preferences'">
+  <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <h3 class="text-sm font-medium text-slate-300 mb-4">Información de facturación</h3>
+
+    <div class="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+      <div>
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Razón social</p>
+        <p class="text-slate-200">Mallamaseps S.A.S.</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">NIT</p>
+        <p class="text-slate-200">900.123.456-7</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Email de facturación</p>
+        <p class="text-slate-200">facturacion&#64;mallamaseps.com</p>
+      </div>
+      <div>
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Moneda</p>
+        <p class="text-slate-200">COP (Peso colombiano)</p>
+      </div>
+    </div>
+
+    <div class="mt-6 pt-4 border-t border-slate-800">
+      <p class="text-xs text-slate-500">
+        Para modificar la información de facturación, contacta a soporte.
+      </p>
+    </div>
+  </div>
+</ng-container>

@@ -165,14 +165,14 @@ export class UsageComponent implements OnInit, OnDestroy {
   }
 
   exportCsv(): void {
-    this.billingService.exportCsv(this.token).subscribe({
+    this.billingService.exportCsv(this.token, this.selectedStatus).subscribe({
       next: (blob) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         const now = new Date();
         const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
-        a.download = `usage-${month}.csv`;
+        a.download = `usage-${this.selectedStatus}-${month}.csv`;
         a.click();
         URL.revokeObjectURL(url);
       },
@@ -267,9 +267,15 @@ export class UsageComponent implements OnInit, OnDestroy {
 
   statusCardClass(status: BillingStatusFilter): string {
     const active = this.selectedStatus === status;
-    return active
-      ? 'border-violet-500 bg-violet-500/10'
-      : 'border-slate-800 bg-slate-900 hover:border-slate-700';
+
+    const palette: Record<BillingStatusFilter, string> = {
+      all: active ? 'border-slate-500 bg-slate-500/10' : 'border-slate-800 bg-slate-900 hover:border-slate-700',
+      unbilled: active ? 'border-violet-500 bg-violet-500/15 ring-1 ring-violet-500/40' : 'border-violet-900/60 bg-violet-950/20 hover:border-violet-700',
+      pending_pay: active ? 'border-amber-500 bg-amber-500/15 ring-1 ring-amber-500/40' : 'border-amber-900/60 bg-amber-950/20 hover:border-amber-700',
+      pay: active ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500/40' : 'border-emerald-900/60 bg-emerald-950/20 hover:border-emerald-700',
+    };
+
+    return palette[status];
   }
 
   statusLabel(status: BillingStatusFilter): string {

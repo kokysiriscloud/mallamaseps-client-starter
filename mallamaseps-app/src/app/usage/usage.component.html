@@ -60,7 +60,10 @@
             class="rounded-xl border p-3 text-left transition-colors"
             [ngClass]="statusCardClass(item.status)"
             (click)="changeStatus(item.status)">
-            <p class="text-[11px] uppercase tracking-wider text-slate-500">{{ item.label }}</p>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[11px] uppercase tracking-wider text-slate-500">{{ item.label }}</p>
+              <span *ngIf="item.status === 'unbilled'" class="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">Principal</span>
+            </div>
             <p class="text-lg font-semibold text-white mt-1">{{ item.pages | number }} págs</p>
             <p class="text-sm text-slate-300">{{ item.documents | number }} docs</p>
             <p class="text-xs text-slate-400 mt-1">{{ item.amount | currency:'COP':'symbol-narrow':'1.0-0' }}</p>

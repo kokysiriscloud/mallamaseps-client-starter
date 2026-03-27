@@ -865,24 +865,33 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  async exportCsv(): Promise<string> {
+  async exportCsv(billingStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay' = 'unbilled'): Promise<string> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const records = await this.billingRepo.find({
-      where: {
-        createdAt: Between(startOfMonth, endOfMonth),
-      },
-      order: { createdAt: 'DESC' },
+    const query = this.billingRepo.createQueryBuilder('b').where('b.createdAt >= :start AND b.createdAt <= :end', {
+      start: startOfMonth,
+      end: endOfMonth,
     });
 
-    const header = 'id,document_id,filename,extracted_pages,created_at';
+    if (billingStatus !== 'all') {
+      if (billingStatus === 'unbilled') {
+        query.andWhere('(b.billingStatus IS NULL OR b.billingStatus = :status)', { status: 'unbilled' });
+      } else {
+        query.andWhere('b.billingStatus = :status', { status: billingStatus });
+      }
+    }
+
+    const records = await query.orderBy('b.createdAt', 'DESC').getMany();
+
+    const header = 'id,document_id,filename,extracted_pages,billing_status,created_at';
     const rows = records.map((r) => {
       const filename = (r.filename ?? '').replace(/"/g, '""');
       const docId = (r.documentId ?? '').replace(/"/g, '""');
       const date = r.createdAt?.toISOString() ?? '';
-      return `${r.id},"${docId}","${filename}",${r.extractedPages ?? 0},${date}`;
+      const status = String(r.billingStatus || 'unbilled').replace(/"/g, '""');
+      return `${r.id},"${docId}","${filename}",${r.extractedPages ?? 0},"${status}",${date}`;
     });
 
     return [header, ...rows].join('\n');

@@ -22,11 +22,17 @@ export class BillingController {
 
   @Get('export')
   @Header('Content-Type', 'text/csv')
-  async exportCsv(@Res() res: Response) {
+  async exportCsv(
+    @Query('billingStatus') billingStatus = 'unbilled',
+    @Res() res: Response,
+  ) {
     const now = new Date();
     const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
-    res.setHeader('Content-Disposition', `attachment; filename="usage-${month}.csv"`);
-    const csv = await this.billingService.exportCsv();
+    const normalized = ['all', 'unbilled', 'pending_pay', 'pay'].includes(String(billingStatus))
+      ? String(billingStatus)
+      : 'unbilled';
+    res.setHeader('Content-Disposition', `attachment; filename="usage-${normalized}-${month}.csv"`);
+    const csv = await this.billingService.exportCsv(normalized as 'all' | 'unbilled' | 'pending_pay' | 'pay');
     res.send(csv);
   }
 

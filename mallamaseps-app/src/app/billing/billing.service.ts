@@ -102,9 +102,10 @@ export class BillingService {
     return this.http.put<UsageAlerts>(`${this.apiUrl}/alerts`, alerts, { headers });
   }
 
-  exportCsv(token: string): Observable<Blob> {
+  exportCsv(token: string, billingStatus: BillingStatusFilter = 'unbilled'): Observable<Blob> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/export`, { headers, responseType: 'blob' });
+    const params = new HttpParams().set('billingStatus', billingStatus);
+    return this.http.get(`${this.apiUrl}/export`, { headers, params, responseType: 'blob' });
   }
 
   getDailyDetail(token: string, date: string, page = 1, limit = 20): Observable<DailyDetail> {

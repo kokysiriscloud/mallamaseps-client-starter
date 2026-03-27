@@ -540,6 +540,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     totalPages: number;
     totalAmount: number;
   }): Promise<void> {
+    const authBaseUrl = String(process.env.AUTH_BASE_URL || '').trim();
+    const authInternalKey = String(process.env.AUTH_INTERNAL_API_KEY || '').trim();
     const integrationsBaseUrl = String(process.env.INTEGRATIONS_BASE_URL || '').trim();
     const integrationsApiKey = String(process.env.INTEGRATIONS_API_KEY || '').trim();
     const recipientsCsv = String(process.env.BILLING_LIQUIDATION_NOTIFY_TO || 'admin@siriscloud.com.co').trim();
@@ -551,6 +553,32 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
     const recipients = Array.from(new Set(recipientsCsv.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)));
     if (!recipients.length) return;
+
+    let tenantName = '';
+    if (authBaseUrl && authInternalKey) {
+      const authBase = authBaseUrl.replace(/\/$/, '');
+      const authInternalPath = `/auth/internal/tenants/${encodeURIComponent(input.tenantId)}/users-emails`;
+      const authUrl = authBase.endsWith('/api') ? `${authBase}${authInternalPath}` : `${authBase}/api${authInternalPath}`;
+
+      const authResp = await fetch(authUrl, {
+        method: 'GET',
+        headers: {
+          'x-internal-key': authInternalKey,
+        },
+      });
+
+      if (!authResp.ok) {
+        const text = await authResp.text().catch(() => '');
+        this.logger.warn(
+          `No se pudo obtener tenantName para liquidación tenant=${input.tenantId}: ${authResp.status} ${text}`,
+        );
+      } else {
+        const authJson: any = await authResp.json().catch(() => ({}));
+        tenantName = String(authJson?.tenantName || '').trim();
+      }
+    } else {
+      this.logger.warn('No hay AUTH_BASE_URL/AUTH_INTERNAL_API_KEY para resolver tenantName en notificación de liquidación');
+    }
 
     const integrationsBase = integrationsBaseUrl.replace(/\/$/, '');
     const integrationsPath = '/email/liquidation-notice';
@@ -567,6 +595,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       body: JSON.stringify({
         recipients,
         tenantId: input.tenantId,
+        tenantName,
         liquidationId: input.liquidationId,
         userId: input.userId,
         cutoffDate: input.cutoffDate,
@@ -582,7 +611,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger.log(`Notificación de liquidación enviada id=${input.liquidationId} recipients=${recipients.length}`);
+    this.logger.log(
+      `Notificación de liquidación enviada id=${input.liquidationId} recipients=${recipients.length} tenantName=${tenantName || '-'} `,
+    );
   }
 
   private async getOrCreateConfig(tenantId: string): Promise<BillingConfig> {

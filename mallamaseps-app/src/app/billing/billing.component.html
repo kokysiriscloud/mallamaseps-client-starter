@@ -1,7 +1,7 @@
 <!-- Tabs -->
 <div class="flex gap-6 border-b border-slate-800 mb-6">
   <button
-    *ngFor="let tab of [['overview','Liquidar'], ['history','Historial'], ['preferences','Tarifas']]"
+    *ngFor="let tab of [['overview','Liquidar'], ['history','Historial']]"
     type="button"
     class="pb-3 text-sm font-medium transition-colors"
     [ngClass]="activeTab === tab[0] ? 'text-white border-b-2 border-violet-500' : 'text-slate-500 hover:text-slate-300'"
@@ -89,29 +89,3 @@
   </div>
 </ng-container>
 
-<!-- PREFERENCES -->
-<ng-container *ngIf="activeTab === 'preferences'">
-  <div class="rounded-xl border border-slate-800 bg-slate-900 p-5">
-    <h3 class="text-sm font-medium text-slate-300 mb-4">Tarifas escalonadas vigentes</h3>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div>
-        <label class="block text-xs text-slate-500 mb-1">Límite tramo 1 (páginas)</label>
-        <input type="number" [(ngModel)]="rate.tier1LimitPages" class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100" />
-      </div>
-      <div>
-        <label class="block text-xs text-slate-500 mb-1">Tarifa tramo 1 (COP)</label>
-        <input type="number" [(ngModel)]="rate.tier1Rate" class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100" />
-      </div>
-      <div>
-        <label class="block text-xs text-slate-500 mb-1">Tarifa tramo 2 (COP)</label>
-        <input type="number" [(ngModel)]="rate.tier2Rate" class="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100" />
-      </div>
-    </div>
-
-    <div class="mt-4 flex items-center justify-between">
-      <p class="text-xs text-slate-500">Vigente desde {{ rate.effectiveFrom | date:'yyyy-MM-dd HH:mm' }}</p>
-      <button type="button" (click)="saveRate()" class="px-4 py-2 rounded-lg bg-violet-600 text-sm text-white hover:bg-violet-500">Guardar tarifa</button>
-    </div>
-  </div>
-</ng-container>

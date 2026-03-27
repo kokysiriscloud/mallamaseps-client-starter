@@ -9,7 +9,7 @@ import {
 } from './billing.service';
 import { SessionService } from '../session.service';
 
-type BillingTab = 'overview' | 'history' | 'preferences';
+type BillingTab = 'overview' | 'history';
 
 @Component({
   selector: 'app-billing',

@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BillingService, BillingSummary, DailyUsage, DailyDetail, UsageAlerts } from '../billing/billing.service';
+import { BillingService, BillingSummary, DailyUsage, DailyDetail, UsageAlerts, BillingStatusFilter, BillingStatusSummary } from '../billing/billing.service';
 import { SessionService } from '../session.service';
 
 @Component({
@@ -24,6 +24,7 @@ export class UsageComponent implements OnInit, OnDestroy {
   chartMax = 0;
   autoRefreshSeconds = 30;
   lastUpdated: Date | null = null;
+  selectedStatus: BillingStatusFilter = 'unbilled';
 
   private autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private autoRefreshCountdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -70,13 +71,26 @@ export class UsageComponent implements OnInit, OnDestroy {
     this.reloadSummary();
   }
 
+  changeStatus(status: BillingStatusFilter): void {
+    if (this.selectedStatus === status) return;
+    this.selectedStatus = status;
+    this.selectedDay = null;
+    this.detail = null;
+    this.reloadSummary();
+  }
+
+  statusCards(): BillingStatusSummary[] {
+    return this.data?.statusSummary || [];
+  }
+
   private reloadSummary(silent = false): void {
     if (!silent) this.loading = true;
 
-    this.billingService.getSummary(this.token).subscribe({
+    this.billingService.getSummary(this.token, this.selectedStatus).subscribe({
       next: (d) => {
         const alerts = d.alerts ?? { warningPercent: 80, criticalPercent: 100 };
         this.data = { ...d, alerts };
+        this.selectedStatus = d.selectedStatus ?? this.selectedStatus;
         this.chartMax = Math.max(1, ...d.daily.map((r) => r.pages));
         this.loading = false;
         this.error = null;
@@ -249,5 +263,19 @@ export class UsageComponent implements OnInit, OnDestroy {
     if (!this.detail) return 0;
     const { page, limit, total } = this.detail.pagination;
     return Math.min(page * limit, total);
+  }
+
+  statusCardClass(status: BillingStatusFilter): string {
+    const active = this.selectedStatus === status;
+    return active
+      ? 'border-violet-500 bg-violet-500/10'
+      : 'border-slate-800 bg-slate-900 hover:border-slate-700';
+  }
+
+  statusLabel(status: BillingStatusFilter): string {
+    if (status === 'unbilled') return 'Sin liquidar';
+    if (status === 'pending_pay') return 'Pendiente pago';
+    if (status === 'pay') return 'Pagado';
+    return 'Todos';
   }
 }

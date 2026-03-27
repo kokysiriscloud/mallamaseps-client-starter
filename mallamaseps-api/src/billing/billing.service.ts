@@ -26,10 +26,21 @@ export interface BudgetInfo {
   resetsIn: number;
 }
 
+export interface BillingStatusSummary {
+  status: 'all' | 'unbilled' | 'pending_pay' | 'pay';
+  label: string;
+  documents: number;
+  pages: number;
+  amount: number;
+}
+
 export interface BillingSummary {
   period: string;
+  selectedStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay';
   totalDocuments: number;
   totalPages: number;
+  totalAmount: number;
+  statusSummary: BillingStatusSummary[];
   budget: BudgetInfo;
   alerts: UsageAlerts;
   daily: DailyUsage[];
@@ -114,7 +125,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async getSummary(tenantId: string): Promise<BillingSummary> {
+  async getSummary(
+    tenantId: string,
+    billingStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay' = 'unbilled',
+  ): Promise<BillingSummary> {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
@@ -122,36 +136,60 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
     const period = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const selectedStatus = billingStatus;
 
-    const [totalsRaw, dailyRaw] = await Promise.all([
+    const totalsQuery = this.billingRepo
+      .createQueryBuilder('b')
+      .select('COUNT(*)', 'totalDocuments')
+      .addSelect('COALESCE(SUM(b.extractedPages), 0)', 'totalPages')
+      .where('b.createdAt >= :start AND b.createdAt <= :end', {
+        start: startOfMonth,
+        end: endOfMonth,
+      });
+
+    const dailyQuery = this.billingRepo
+      .createQueryBuilder('b')
+      .select("TO_CHAR(b.created_at, 'YYYY-MM-DD')", 'date')
+      .addSelect('COUNT(*)', 'documents')
+      .addSelect('COALESCE(SUM(b.extracted_pages), 0)', 'pages')
+      .where('b.createdAt >= :start AND b.createdAt <= :end', {
+        start: startOfMonth,
+        end: endOfMonth,
+      });
+
+    if (selectedStatus !== 'all') {
+      if (selectedStatus === 'unbilled') {
+        totalsQuery.andWhere('(b.billingStatus IS NULL OR b.billingStatus = :status)', { status: 'unbilled' });
+        dailyQuery.andWhere('(b.billingStatus IS NULL OR b.billingStatus = :status)', { status: 'unbilled' });
+      } else {
+        totalsQuery.andWhere('b.billingStatus = :status', { status: selectedStatus });
+        dailyQuery.andWhere('b.billingStatus = :status', { status: selectedStatus });
+      }
+    }
+
+    dailyQuery.groupBy("TO_CHAR(b.created_at, 'YYYY-MM-DD')").orderBy('date', 'ASC');
+
+    const [totalsRaw, dailyRaw, statusRaw, config, rate] = await Promise.all([
+      totalsQuery.getRawOne(),
+      dailyQuery.getRawMany(),
       this.billingRepo
         .createQueryBuilder('b')
-        .select('COUNT(*)', 'totalDocuments')
-        .addSelect('COALESCE(SUM(b.extractedPages), 0)', 'totalPages')
-        .where('b.createdAt >= :start AND b.createdAt <= :end', {
-          start: startOfMonth,
-          end: endOfMonth,
-        })
-        .getRawOne(),
-
-      this.billingRepo
-        .createQueryBuilder('b')
-        .select("TO_CHAR(b.created_at, 'YYYY-MM-DD')", 'date')
+        .select("COALESCE(b.billing_status, 'unbilled')", 'status')
         .addSelect('COUNT(*)', 'documents')
         .addSelect('COALESCE(SUM(b.extracted_pages), 0)', 'pages')
         .where('b.createdAt >= :start AND b.createdAt <= :end', {
           start: startOfMonth,
           end: endOfMonth,
         })
-        .groupBy("TO_CHAR(b.created_at, 'YYYY-MM-DD')")
-        .orderBy('date', 'ASC')
+        .groupBy("COALESCE(b.billing_status, 'unbilled')")
+        .orderBy('status', 'ASC')
         .getRawMany(),
+      this.getOrCreateConfig(tenantId),
+      this.getActiveRateConfig(tenantId),
     ]);
 
-    const totalDocuments = parseInt(totalsRaw.totalDocuments, 10) || 0;
-    const totalPages = parseInt(totalsRaw.totalPages, 10) || 0;
-    const config = await this.getOrCreateConfig(tenantId);
-    const rate = await this.getActiveRateConfig(tenantId);
+    const totalDocuments = parseInt(totalsRaw?.totalDocuments || '0', 10) || 0;
+    const totalPages = parseInt(totalsRaw?.totalPages || '0', 10) || 0;
 
     // Days until month resets
     const lastDay = new Date(year, month + 1, 0).getDate();
@@ -173,13 +211,45 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       daily.push(dailyMap.get(key) ?? { date: key, documents: 0, pages: 0 });
     }
 
+    const statusMap = new Map<string, { documents: number; pages: number }>();
+    for (const row of statusRaw) {
+      statusMap.set(String(row.status || 'unbilled'), {
+        documents: parseInt(row.documents, 10) || 0,
+        pages: parseInt(row.pages, 10) || 0,
+      });
+    }
+
+    const statusSummary: BillingStatusSummary[] = [
+      { status: 'all', label: 'Todos', documents: 0, pages: 0, amount: 0 },
+      { status: 'unbilled', label: 'Sin liquidar', documents: 0, pages: 0, amount: 0 },
+      { status: 'pending_pay', label: 'Pendiente pago', documents: 0, pages: 0, amount: 0 },
+      { status: 'pay', label: 'Pagado', documents: 0, pages: 0, amount: 0 },
+    ].map((item) => {
+      if (item.status === 'all') return item;
+      const totals = statusMap.get(item.status) || { documents: 0, pages: 0 };
+      return {
+        ...item,
+        documents: totals.documents,
+        pages: totals.pages,
+        amount: this.calculateTierBreakdown(totals.pages, rate).totalAmount,
+      };
+    });
+
+    const allDocuments = statusSummary.filter((x) => x.status !== 'all').reduce((sum, x) => sum + x.documents, 0);
+    const allPages = statusSummary.filter((x) => x.status !== 'all').reduce((sum, x) => sum + x.pages, 0);
+    const allAmount = statusSummary.filter((x) => x.status !== 'all').reduce((sum, x) => sum + x.amount, 0);
+    statusSummary[0] = { status: 'all', label: 'Todos', documents: allDocuments, pages: allPages, amount: allAmount };
+
     const spentBreakdown = this.calculateTierBreakdown(totalPages, rate);
     const capBreakdown = this.calculateTierBreakdown(config.budgetLimitPages, rate);
 
     return {
       period,
+      selectedStatus,
       totalDocuments,
       totalPages,
+      totalAmount: spentBreakdown.totalAmount,
+      statusSummary,
       budget: {
         limit: config.budgetLimitPages,
         used: totalPages,

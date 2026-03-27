@@ -24,6 +24,10 @@
               <p class="text-xs text-slate-500 uppercase tracking-wider">Total Documentos</p>
               <p class="text-2xl font-bold text-white">{{ data.totalDocuments | number }}</p>
             </div>
+            <div>
+              <p class="text-xs text-slate-500 uppercase tracking-wider">Total Valor</p>
+              <p class="text-2xl font-bold text-white">{{ data.totalAmount | currency:'COP':'symbol-narrow':'1.0-0' }}</p>
+            </div>
           </div>
           <div class="flex items-center gap-3">
             <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
@@ -48,6 +52,20 @@
         <p class="text-xs text-slate-500 mb-2">
           <span *ngIf="lastUpdated">Última actualización: {{ lastUpdated | date:'yyyy-MM-dd HH:mm:ss':'-0500' }}</span>
         </p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          <button
+            *ngFor="let item of statusCards()"
+            type="button"
+            class="rounded-xl border p-3 text-left transition-colors"
+            [ngClass]="statusCardClass(item.status)"
+            (click)="changeStatus(item.status)">
+            <p class="text-[11px] uppercase tracking-wider text-slate-500">{{ item.label }}</p>
+            <p class="text-lg font-semibold text-white mt-1">{{ item.pages | number }} págs</p>
+            <p class="text-sm text-slate-300">{{ item.documents | number }} docs</p>
+            <p class="text-xs text-slate-400 mt-1">{{ item.amount | currency:'COP':'symbol-narrow':'1.0-0' }}</p>
+          </button>
+        </div>
 
         <!-- Bar chart -->
         <div class="flex items-end gap-[2px] h-40 mt-2">
@@ -84,7 +102,7 @@
           <div>
             <h3 class="text-sm font-medium text-slate-200">{{ dayLabelLong(selectedDay) }}</h3>
             <p class="text-xs text-slate-500 mt-0.5">
-              {{ selectedDay.documents | number }} documentos · {{ selectedDay.pages | number }} páginas
+              {{ statusLabel(selectedStatus) }} · {{ selectedDay.documents | number }} documentos · {{ selectedDay.pages | number }} páginas
             </p>
           </div>
           <button

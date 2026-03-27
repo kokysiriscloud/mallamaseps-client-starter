@@ -13,10 +13,23 @@ export interface UsageAlerts {
   criticalPercent: number;
 }
 
+export type BillingStatusFilter = 'all' | 'unbilled' | 'pending_pay' | 'pay';
+
+export interface BillingStatusSummary {
+  status: BillingStatusFilter;
+  label: string;
+  documents: number;
+  pages: number;
+  amount: number;
+}
+
 export interface BillingSummary {
   period: string;
+  selectedStatus: BillingStatusFilter;
   totalDocuments: number;
   totalPages: number;
+  totalAmount: number;
+  statusSummary: BillingStatusSummary[];
   budget: { limit: number; used: number; spent: number; budgetCap: number; costPerPage: number; resetsIn: number };
   alerts: UsageAlerts;
   daily: DailyUsage[];
@@ -73,9 +86,10 @@ export class BillingService {
   private http = inject(HttpClient);
   private apiUrl = 'http://localhost:3100/api/billing';
 
-  getSummary(token: string): Observable<BillingSummary> {
+  getSummary(token: string, billingStatus: BillingStatusFilter = 'unbilled'): Observable<BillingSummary> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-    return this.http.get<BillingSummary>(this.apiUrl, { headers });
+    const params = new HttpParams().set('billingStatus', billingStatus);
+    return this.http.get<BillingSummary>(this.apiUrl, { headers, params });
   }
 
   updateBudget(token: string, limit: number): Observable<BillingSummary['budget']> {

@@ -9,9 +9,15 @@ export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
   @Get()
-  getSummary(@Req() req: Request & { user?: any }) {
+  getSummary(
+    @Req() req: Request & { user?: any },
+    @Query('billingStatus') billingStatus = 'unbilled',
+  ) {
     const tenantId = String(req?.user?.tid || 'default-tenant');
-    return this.billingService.getSummary(tenantId);
+    const normalized = ['all', 'unbilled', 'pending_pay', 'pay'].includes(String(billingStatus))
+      ? (String(billingStatus) as 'all' | 'unbilled' | 'pending_pay' | 'pay')
+      : 'unbilled';
+    return this.billingService.getSummary(tenantId, normalized);
   }
 
   @Get('export')

@@ -82,7 +82,6 @@
           </td>
           <td class="py-3 text-right space-x-2">
             <button type="button" (click)="exportLiquidation(row)" class="px-2 py-1 rounded border border-slate-700 text-xs text-slate-300 hover:bg-slate-800">CSV</button>
-            <button *ngIf="row.status !== 'pay'" type="button" (click)="markPay(row)" class="px-2 py-1 rounded bg-emerald-700 text-xs text-white hover:bg-emerald-600">Pay</button>
           </td>
         </tr>
       </tbody>

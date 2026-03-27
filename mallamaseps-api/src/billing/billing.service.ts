@@ -147,15 +147,23 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         end: endOfMonth,
       });
 
+    const dailyDateExpr = selectedStatus === 'pending_pay' || selectedStatus === 'pay'
+      ? "TO_CHAR(COALESCE(bl.cutoff_date, b.created_at), 'YYYY-MM-DD')"
+      : "TO_CHAR(b.created_at, 'YYYY-MM-DD')";
+
     const dailyQuery = this.billingRepo
       .createQueryBuilder('b')
-      .select("TO_CHAR(b.created_at, 'YYYY-MM-DD')", 'date')
+      .select(dailyDateExpr, 'date')
       .addSelect('COUNT(*)', 'documents')
       .addSelect('COALESCE(SUM(b.extracted_pages), 0)', 'pages')
       .where('b.createdAt >= :start AND b.createdAt <= :end', {
         start: startOfMonth,
         end: endOfMonth,
       });
+
+    if (selectedStatus === 'pending_pay' || selectedStatus === 'pay') {
+      dailyQuery.leftJoin(BillingLiquidation, 'bl', 'bl.id = b.billing_id');
+    }
 
     if (selectedStatus !== 'all') {
       if (selectedStatus === 'unbilled') {
@@ -167,7 +175,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    dailyQuery.groupBy("TO_CHAR(b.created_at, 'YYYY-MM-DD')").orderBy('date', 'ASC');
+    dailyQuery.groupBy(dailyDateExpr).orderBy('date', 'ASC');
 
     const [totalsRaw, dailyRaw, statusRaw, config, rate] = await Promise.all([
       totalsQuery.getRawOne(),

@@ -10,20 +10,24 @@ async function refreshTokens(refreshToken: string): Promise<{ accessToken: strin
   const authApiUrl = String(environment.authApiUrl || '').replace(/\/$/, '');
   if (!authApiUrl) return null;
 
-  const response = await fetch(`${authApiUrl}/refresh`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  });
+  try {
+    const response = await fetch(`${authApiUrl}/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
 
-  if (!response.ok) return null;
+    if (!response.ok) return null;
 
-  const payload = (await response.json()) as any;
-  const accessToken = String(payload?.accessToken || '').trim();
-  const nextRefresh = String(payload?.refreshToken || '').trim();
+    const payload = (await response.json()) as any;
+    const accessToken = String(payload?.accessToken || '').trim();
+    const nextRefresh = String(payload?.refreshToken || '').trim();
 
-  if (!accessToken || !nextRefresh) return null;
-  return { accessToken, refreshToken: nextRefresh };
+    if (!accessToken || !nextRefresh) return null;
+    return { accessToken, refreshToken: nextRefresh };
+  } catch {
+    return null;
+  }
 }
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
@@ -31,7 +35,6 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const current = sessionService.session;
   const isRefreshCall = req.url.includes('/auth/refresh');
 
-  // Regla solicitada: cada request al API intenta refresh y actualiza localStorage.
   if (!isRefreshCall && current?.refreshToken) {
     if (!refreshInFlight) {
       refreshInFlight = refreshTokens(current.refreshToken).finally(() => {
@@ -41,26 +44,44 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
     return from(refreshInFlight).pipe(
       switchMap((tokens) => {
-        if (!tokens) {
-          sessionService.clear();
-          window.location.href = environment.authPortalUrl;
-          return throwError(() => new Error('No se pudo refrescar token'));
-        }
+        // Best-effort: si refresh falla, continuar con token actual y dejar que API decida.
+        const tokenToUse = tokens?.accessToken || current.token;
 
-        sessionService.saveTokens(tokens.accessToken, tokens.refreshToken);
+        if (tokens?.accessToken && tokens?.refreshToken) {
+          sessionService.saveTokens(tokens.accessToken, tokens.refreshToken);
+        }
 
         const authReq = req.clone({
           setHeaders: {
-            Authorization: `Bearer ${tokens.accessToken}`,
+            Authorization: `Bearer ${tokenToUse}`,
           },
         });
 
-        return next(authReq);
+        return next(authReq).pipe(
+          catchError((error: HttpErrorResponse) => {
+            if (error?.status === 401) {
+              sessionService.clear();
+              window.location.href = environment.authPortalUrl;
+            }
+            return throwError(() => error);
+          }),
+        );
       }),
-      catchError((error: HttpErrorResponse) => {
-        sessionService.clear();
-        window.location.href = environment.authPortalUrl;
-        return throwError(() => error);
+      catchError(() => {
+        const fallbackReq = req.clone({
+          setHeaders: {
+            Authorization: `Bearer ${current.token}`,
+          },
+        });
+        return next(fallbackReq).pipe(
+          catchError((error: HttpErrorResponse) => {
+            if (error?.status === 401) {
+              sessionService.clear();
+              window.location.href = environment.authPortalUrl;
+            }
+            return throwError(() => error);
+          }),
+        );
       }),
     );
   }

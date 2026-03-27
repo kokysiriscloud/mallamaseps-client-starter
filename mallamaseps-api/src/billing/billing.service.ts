@@ -370,6 +370,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     }
 
     const usersJson: any = await usersResp.json().catch(() => ({ emails: [] }));
+    const tenantName = String(usersJson?.tenantName || '').trim();
     const recipients = Array.from(
       new Set((usersJson?.emails || []).map((x: any) => String(x || '').trim().toLowerCase()).filter(Boolean)),
     );
@@ -394,6 +395,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       body: JSON.stringify({
         recipients,
         tenantId: input.tenantId,
+        tenantName,
         period: input.period,
         usagePercent: input.usagePercent,
         threshold: input.threshold,

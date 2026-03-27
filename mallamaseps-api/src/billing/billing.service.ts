@@ -350,15 +350,18 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
 
-    const usersResp = await fetch(
-      `${authBaseUrl.replace(/\/$/, '')}/auth/internal/tenants/${encodeURIComponent(input.tenantId)}/users-emails`,
-      {
-        method: 'GET',
-        headers: {
-          'x-internal-key': authInternalKey,
-        },
+    const authBase = authBaseUrl.replace(/\/$/, '');
+    const authInternalPath = `/auth/internal/tenants/${encodeURIComponent(input.tenantId)}/users-emails`;
+    const authUrl = authBase.endsWith('/api')
+      ? `${authBase}${authInternalPath}`
+      : `${authBase}/api${authInternalPath}`;
+
+    const usersResp = await fetch(authUrl, {
+      method: 'GET',
+      headers: {
+        'x-internal-key': authInternalKey,
       },
-    );
+    });
 
     if (!usersResp.ok) {
       const text = await usersResp.text().catch(() => '');

@@ -56,6 +56,8 @@ export interface BillingRateView {
 
 export interface BillingLiquidationPreview {
   cutoffDate: string;
+  cutoffInput: string;
+  cutoffTimezone: string;
   totalDocuments: number;
   totalPages: number;
   tier1Pages: number;
@@ -332,6 +334,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
     return {
       cutoffDate: cutoff.toISOString(),
+      cutoffInput: cutoffDate,
+      cutoffTimezone: 'America/Bogota',
       totalDocuments,
       totalPages,
       tier1Pages: breakdown.tier1Pages,
@@ -472,8 +476,12 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   private resolveCutoffDate(cutoffDate: string): Date {
     const raw = String(cutoffDate || '').trim();
     if (!raw) throw new Error('cutoffDate es obligatorio');
-    const base = new Date(`${raw}T23:59:59.999Z`);
+
+    // Fin de día en America/Bogota (UTC-5)
+    const base = new Date(`${raw}T23:59:59.999-05:00`);
     if (Number.isNaN(base.getTime())) throw new Error('cutoffDate inválido');
+
+    this.logger.log(`Billing cutoff resolved input=${raw} tz=America/Bogota utc=${base.toISOString()}`);
     return base;
   }
 

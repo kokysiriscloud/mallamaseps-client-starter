@@ -14,7 +14,8 @@ function resolveAuthApiUrl(explicit?: string): string {
   if (fromRuntime) return fromRuntime;
 
   // Default explícito al servicio auth API para evitar apuntar al portal por error.
-  return 'http://localhost:3000/api/auth';
+  return 'https://api-auth.siriscloud.com.co/api/auth';
+  // return 'http://localhost:3000/api/auth';
 }
 
 const authPortalUrl = runtimeConfig.authPortalUrl || 'http://localhost:4200/login';

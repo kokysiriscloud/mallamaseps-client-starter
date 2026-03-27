@@ -379,7 +379,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
 
-    const sendResp = await fetch(`${integrationsBaseUrl.replace(/\/$/, '')}/email/usage-alert`, {
+    const integrationsBase = integrationsBaseUrl.replace(/\/$/, '');
+    const integrationsPath = '/email/usage-alert';
+    const integrationsUrl = integrationsBase.endsWith('/api')
+      ? `${integrationsBase}${integrationsPath}`
+      : `${integrationsBase}/api${integrationsPath}`;
+
+    const sendResp = await fetch(integrationsUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

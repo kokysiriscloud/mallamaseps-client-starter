@@ -17,8 +17,8 @@ async function refreshTokens(refreshToken: string): Promise<{ accessToken: strin
   });
 
   if (!response.ok) return null;
-  const payload = (await response.json()) as any;
 
+  const payload = (await response.json()) as any;
   const accessToken = String(payload?.accessToken || '').trim();
   const nextRefresh = String(payload?.refreshToken || '').trim();
 
@@ -28,51 +28,51 @@ async function refreshTokens(refreshToken: string): Promise<{ accessToken: strin
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const sessionService = inject(SessionService);
+  const current = sessionService.session;
+  const isRefreshCall = req.url.includes('/auth/refresh');
+
+  // Regla solicitada: cada request al API intenta refresh y actualiza localStorage.
+  if (!isRefreshCall && current?.refreshToken) {
+    if (!refreshInFlight) {
+      refreshInFlight = refreshTokens(current.refreshToken).finally(() => {
+        refreshInFlight = null;
+      });
+    }
+
+    return from(refreshInFlight).pipe(
+      switchMap((tokens) => {
+        if (!tokens) {
+          sessionService.clear();
+          window.location.href = environment.authPortalUrl;
+          return throwError(() => new Error('No se pudo refrescar token'));
+        }
+
+        sessionService.saveTokens(tokens.accessToken, tokens.refreshToken);
+
+        const authReq = req.clone({
+          setHeaders: {
+            Authorization: `Bearer ${tokens.accessToken}`,
+          },
+        });
+
+        return next(authReq);
+      }),
+      catchError((error: HttpErrorResponse) => {
+        sessionService.clear();
+        window.location.href = environment.authPortalUrl;
+        return throwError(() => error);
+      }),
+    );
+  }
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
-      const isUnauthorized = error?.status === 401;
-      const isRefreshCall = req.url.includes('/auth/refresh');
-      const current = sessionService.session;
-
-      if (!isUnauthorized || isRefreshCall || !current?.refreshToken) {
-        if (isUnauthorized) {
-          sessionService.clear();
-          window.location.href = environment.authPortalUrl;
-        }
-        return throwError(() => error);
+      if (error?.status === 401) {
+        sessionService.clear();
+        window.location.href = environment.authPortalUrl;
       }
 
-      if (!refreshInFlight) {
-        refreshInFlight = refreshTokens(current.refreshToken).finally(() => {
-          refreshInFlight = null;
-        });
-      }
-
-      return from(refreshInFlight).pipe(
-        switchMap((tokens) => {
-          if (!tokens) {
-            sessionService.clear();
-            window.location.href = environment.authPortalUrl;
-            return throwError(() => error);
-          }
-
-          sessionService.saveTokens(tokens.accessToken, tokens.refreshToken);
-
-          const retried = req.clone({
-            setHeaders: {
-              Authorization: `Bearer ${tokens.accessToken}`,
-            },
-          });
-
-          return next(retried);
-        }),
-        catchError(() => {
-          sessionService.clear();
-          window.location.href = environment.authPortalUrl;
-          return throwError(() => error);
-        }),
-      );
+      return throwError(() => error);
     }),
   );
 };

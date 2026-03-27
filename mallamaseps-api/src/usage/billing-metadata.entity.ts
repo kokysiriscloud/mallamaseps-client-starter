@@ -29,6 +29,18 @@ export class BillingMetadata {
   @Column({ name: 'processed_authorizations', type: 'int', nullable: true })
   processedAuthorizations: number | null;
 
+  @Column({ name: 'billing_status', type: 'varchar', nullable: true })
+  billingStatus: 'unbilled' | 'pending_pay' | 'pay' | null;
+
+  @Column({ name: 'billing_id', type: 'int', nullable: true })
+  billingId: number | null;
+
+  @Column({ name: 'billing_marked_at', type: 'timestamp', nullable: true })
+  billingMarkedAt: Date | null;
+
+  @Column({ name: 'billing_marked_by', type: 'varchar', nullable: true })
+  billingMarkedBy: string | null;
+
   @Column({ name: 'created_at', type: 'timestamp', nullable: true })
   createdAt: Date | null;
 }

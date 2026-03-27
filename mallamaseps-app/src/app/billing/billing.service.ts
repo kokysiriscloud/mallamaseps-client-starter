@@ -36,6 +36,38 @@ export interface DailyDetail {
   pagination: { total: number; page: number; limit: number; totalPages: number };
 }
 
+export interface BillingRate {
+  tier1LimitPages: number;
+  tier1Rate: number;
+  tier2Rate: number;
+  effectiveFrom: string;
+}
+
+export interface BillingLiquidationPreview {
+  cutoffDate: string;
+  totalDocuments: number;
+  totalPages: number;
+  tier1Pages: number;
+  tier1Rate: number;
+  tier1Amount: number;
+  tier2Pages: number;
+  tier2Rate: number;
+  tier2Amount: number;
+  totalAmount: number;
+}
+
+export interface BillingLiquidationItem {
+  id: number;
+  cutoffDate: string;
+  totalDocuments: number;
+  totalPages: number;
+  totalAmount: number;
+  status: 'pending_pay' | 'pay';
+  createdBy: string;
+  createdAt: string;
+  paidAt: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class BillingService {
   private http = inject(HttpClient);
@@ -65,5 +97,40 @@ export class BillingService {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
     const params = new HttpParams().set('date', date).set('page', page).set('limit', limit);
     return this.http.get<DailyDetail>(`${this.apiUrl}/daily`, { headers, params });
+  }
+
+  getRate(token: string): Observable<BillingRate> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.get<BillingRate>(`${this.apiUrl}/rate`, { headers });
+  }
+
+  updateRate(token: string, payload: { tier1LimitPages: number; tier1Rate: number; tier2Rate: number }): Observable<BillingRate> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.put<BillingRate>(`${this.apiUrl}/rate`, payload, { headers });
+  }
+
+  previewLiquidation(token: string, cutoffDate: string): Observable<BillingLiquidationPreview> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.post<BillingLiquidationPreview>(`${this.apiUrl}/liquidations/preview`, { cutoffDate }, { headers });
+  }
+
+  createLiquidation(token: string, cutoffDate: string): Observable<any> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.post<any>(`${this.apiUrl}/liquidations`, { cutoffDate }, { headers });
+  }
+
+  listLiquidations(token: string): Observable<BillingLiquidationItem[]> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.get<BillingLiquidationItem[]>(`${this.apiUrl}/liquidations`, { headers });
+  }
+
+  markLiquidationPay(token: string, id: number): Observable<any> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.patch<any>(`${this.apiUrl}/liquidations/${id}/pay`, {}, { headers });
+  }
+
+  exportLiquidationCsv(token: string, id: number): Observable<Blob> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/liquidations/${id}/export`, { headers, responseType: 'blob' });
   }
 }

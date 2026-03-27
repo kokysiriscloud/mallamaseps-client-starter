@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Query, Res, Header, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Patch, Param, Body, Query, Res, Header, Req, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { BillingService } from './billing.service';
 import { AuthGuard } from '../auth.guard';
@@ -53,5 +53,69 @@ export class BillingController {
       parseInt(page, 10),
       parseInt(limit, 10),
     );
+  }
+
+  @Get('rate')
+  getRate(@Req() req: Request & { user?: any }) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.getActiveRate(tenantId);
+  }
+
+  @Put('rate')
+  upsertRate(
+    @Req() req: Request & { user?: any },
+    @Body() body: { tier1LimitPages: number; tier1Rate: number; tier2Rate: number },
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const userId = String(req?.user?.sub || 'system');
+    return this.billingService.upsertRate(tenantId, userId, body);
+  }
+
+  @Post('liquidations/preview')
+  previewLiquidation(
+    @Req() req: Request & { user?: any },
+    @Body() body: { cutoffDate: string },
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.previewLiquidation(tenantId, body?.cutoffDate);
+  }
+
+  @Post('liquidations')
+  liquidate(
+    @Req() req: Request & { user?: any },
+    @Body() body: { cutoffDate: string },
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const userId = String(req?.user?.sub || 'system');
+    return this.billingService.liquidate(tenantId, userId, body?.cutoffDate);
+  }
+
+  @Get('liquidations')
+  listLiquidations(@Req() req: Request & { user?: any }) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    return this.billingService.listLiquidations(tenantId);
+  }
+
+  @Patch('liquidations/:id/pay')
+  markLiquidationPay(
+    @Req() req: Request & { user?: any },
+    @Param('id') id: string,
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const userId = String(req?.user?.sub || 'system');
+    return this.billingService.markLiquidationPay(tenantId, userId, Number(id || 0));
+  }
+
+  @Get('liquidations/:id/export')
+  @Header('Content-Type', 'text/csv')
+  async exportLiquidationCsv(
+    @Req() req: Request & { user?: any },
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const csv = await this.billingService.exportLiquidationCsv(tenantId, Number(id || 0));
+    res.setHeader('Content-Disposition', `attachment; filename="billing-liquidation-${id}.csv"`);
+    res.send(csv);
   }
 }

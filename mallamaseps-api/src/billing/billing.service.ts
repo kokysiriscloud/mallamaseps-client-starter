@@ -1,8 +1,10 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, DataSource, Repository } from 'typeorm';
 import { BillingMetadata } from '../usage/billing-metadata.entity';
 import { BillingConfig } from './billing-config.entity';
+import { BillingLiquidation } from './billing-liquidation.entity';
+import { BillingRateConfig } from './billing-rate-config.entity';
 
 export interface DailyUsage {
   date: string;       // YYYY-MM-DD
@@ -45,6 +47,26 @@ export interface DailyDetail {
   pagination: { total: number; page: number; limit: number; totalPages: number };
 }
 
+export interface BillingRateView {
+  tier1LimitPages: number;
+  tier1Rate: number;
+  tier2Rate: number;
+  effectiveFrom: string;
+}
+
+export interface BillingLiquidationPreview {
+  cutoffDate: string;
+  totalDocuments: number;
+  totalPages: number;
+  tier1Pages: number;
+  tier1Rate: number;
+  tier1Amount: number;
+  tier2Pages: number;
+  tier2Rate: number;
+  tier2Amount: number;
+  totalAmount: number;
+}
+
 @Injectable()
 export class BillingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('BillingService');
@@ -55,6 +77,11 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     private readonly billingRepo: Repository<BillingMetadata>,
     @InjectRepository(BillingConfig)
     private readonly billingConfigRepo: Repository<BillingConfig>,
+    @InjectRepository(BillingLiquidation)
+    private readonly billingLiquidationRepo: Repository<BillingLiquidation>,
+    @InjectRepository(BillingRateConfig)
+    private readonly billingRateRepo: Repository<BillingRateConfig>,
+    private readonly dataSource: DataSource,
   ) {}
 
   onModuleInit(): void {
@@ -122,6 +149,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const totalDocuments = parseInt(totalsRaw.totalDocuments, 10) || 0;
     const totalPages = parseInt(totalsRaw.totalPages, 10) || 0;
     const config = await this.getOrCreateConfig(tenantId);
+    const rate = await this.getActiveRateConfig(tenantId);
 
     // Days until month resets
     const lastDay = new Date(year, month + 1, 0).getDate();
@@ -143,6 +171,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       daily.push(dailyMap.get(key) ?? { date: key, documents: 0, pages: 0 });
     }
 
+    const spentBreakdown = this.calculateTierBreakdown(totalPages, rate);
+    const capBreakdown = this.calculateTierBreakdown(config.budgetLimitPages, rate);
+
     return {
       period,
       totalDocuments,
@@ -150,7 +181,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       budget: {
         limit: config.budgetLimitPages,
         used: totalPages,
-        ...this.calculateCost(totalPages, config.budgetLimitPages),
+        spent: spentBreakdown.totalAmount,
+        budgetCap: capBreakdown.totalAmount,
+        costPerPage: totalPages > rate.tier1LimitPages ? rate.tier2Rate : rate.tier1Rate,
         resetsIn,
       },
       alerts: {
@@ -161,31 +194,28 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Pricing tiers (COP per page):
-   *   0 – 1,000,000  pages → $80
-   *   1,000,000+      pages → $60
-   */
-  private calculateCost(
+  private calculateTierBreakdown(
     totalPages: number,
-    budgetLimitPages: number,
-  ): { costPerPage: number; spent: number; budgetCap: number } {
-    const TIER_1_LIMIT = 1_000_000;
-    const TIER_1_PRICE = 80;   // COP per page
-    const TIER_2_PRICE = 60;   // COP per page
+    rate: { tier1LimitPages: number; tier1Rate: number; tier2Rate: number },
+  ): { tier1Pages: number; tier1Amount: number; tier2Pages: number; tier2Amount: number; totalAmount: number } {
+    const tier1Limit = Math.max(1, Number(rate.tier1LimitPages || 1_000_000));
+    const tier1Rate = Math.max(0, Number(rate.tier1Rate || 80));
+    const tier2Rate = Math.max(0, Number(rate.tier2Rate || 60));
 
-    const calcCost = (pages: number): number => {
-      if (pages <= TIER_1_LIMIT) {
-        return pages * TIER_1_PRICE;
-      }
-      return TIER_1_LIMIT * TIER_1_PRICE + (pages - TIER_1_LIMIT) * TIER_2_PRICE;
+    const pages = Math.max(0, Number(totalPages || 0));
+    const tier1Pages = Math.min(pages, tier1Limit);
+    const tier2Pages = Math.max(0, pages - tier1Limit);
+
+    const tier1Amount = tier1Pages * tier1Rate;
+    const tier2Amount = tier2Pages * tier2Rate;
+
+    return {
+      tier1Pages,
+      tier1Amount,
+      tier2Pages,
+      tier2Amount,
+      totalAmount: tier1Amount + tier2Amount,
     };
-
-    const spent = calcCost(totalPages);
-    const budgetCap = calcCost(budgetLimitPages);
-    const costPerPage = totalPages <= TIER_1_LIMIT ? TIER_1_PRICE : TIER_2_PRICE;
-
-    return { costPerPage, spent, budgetCap };
   }
 
   async updateBudget(tenantId: string, limit: number): Promise<BudgetInfo> {
@@ -211,11 +241,16 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const totalPages = parseInt(totalsRaw.totalPages, 10) || 0;
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const resetsIn = lastDay - now.getDate();
+    const rate = await this.getActiveRateConfig(tenantId);
+    const spentBreakdown = this.calculateTierBreakdown(totalPages, rate);
+    const capBreakdown = this.calculateTierBreakdown(config.budgetLimitPages, rate);
 
     return {
       limit: config.budgetLimitPages,
       used: totalPages,
-      ...this.calculateCost(totalPages, config.budgetLimitPages),
+      spent: spentBreakdown.totalAmount,
+      budgetCap: capBreakdown.totalAmount,
+      costPerPage: totalPages > rate.tier1LimitPages ? rate.tier2Rate : rate.tier1Rate,
       resetsIn,
     };
   }
@@ -237,6 +272,287 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       warningPercent: config.warningPercent,
       criticalPercent: config.criticalPercent,
     };
+  }
+
+  async getActiveRate(tenantId: string): Promise<BillingRateView> {
+    const rate = await this.getActiveRateConfig(tenantId);
+    return {
+      tier1LimitPages: rate.tier1LimitPages,
+      tier1Rate: rate.tier1Rate,
+      tier2Rate: rate.tier2Rate,
+      effectiveFrom: rate.effectiveFrom?.toISOString?.() || new Date().toISOString(),
+    };
+  }
+
+  async upsertRate(
+    tenantId: string,
+    userId: string,
+    input: { tier1LimitPages: number; tier1Rate: number; tier2Rate: number },
+  ): Promise<BillingRateView> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+
+    await this.billingRateRepo.update({ tenantId: tid, isActive: true }, { isActive: false, effectiveTo: new Date() });
+
+    const created = this.billingRateRepo.create({
+      tenantId: tid,
+      tier1LimitPages: Math.max(1, Number(input.tier1LimitPages || 1_000_000)),
+      tier1Rate: Math.max(0, Number(input.tier1Rate || 80)),
+      tier2Rate: Math.max(0, Number(input.tier2Rate || 60)),
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: String(userId || '').trim() || null,
+      createdAt: new Date(),
+    });
+
+    const saved = await this.billingRateRepo.save(created);
+    return {
+      tier1LimitPages: saved.tier1LimitPages,
+      tier1Rate: saved.tier1Rate,
+      tier2Rate: saved.tier2Rate,
+      effectiveFrom: saved.effectiveFrom?.toISOString?.() || new Date().toISOString(),
+    };
+  }
+
+  async previewLiquidation(tenantId: string, cutoffDate: string): Promise<BillingLiquidationPreview> {
+    const cutoff = this.resolveCutoffDate(cutoffDate);
+    const rate = await this.getActiveRateConfig(tenantId);
+
+    const rows = await this.billingRepo
+      .createQueryBuilder('b')
+      .select('COUNT(*)', 'totalDocuments')
+      .addSelect('COALESCE(SUM(COALESCE(b.extractedPages, 0)), 0)', 'totalPages')
+      .where('b.createdAt <= :cutoff', { cutoff })
+      .andWhere('(b.billingStatus IS NULL OR b.billingStatus = :status)', { status: 'unbilled' })
+      .getRawOne();
+
+    const totalDocuments = parseInt(rows?.totalDocuments || '0', 10) || 0;
+    const totalPages = parseInt(rows?.totalPages || '0', 10) || 0;
+    const breakdown = this.calculateTierBreakdown(totalPages, rate);
+
+    return {
+      cutoffDate: cutoff.toISOString(),
+      totalDocuments,
+      totalPages,
+      tier1Pages: breakdown.tier1Pages,
+      tier1Rate: rate.tier1Rate,
+      tier1Amount: breakdown.tier1Amount,
+      tier2Pages: breakdown.tier2Pages,
+      tier2Rate: rate.tier2Rate,
+      tier2Amount: breakdown.tier2Amount,
+      totalAmount: breakdown.totalAmount,
+    };
+  }
+
+  async liquidate(tenantId: string, userId: string, cutoffDate: string): Promise<any> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    const uid = String(userId || '').trim() || 'system';
+    const preview = await this.previewLiquidation(tid, cutoffDate);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const liquidation = queryRunner.manager.create(BillingLiquidation, {
+        tenantId: tid,
+        cutoffDate: new Date(preview.cutoffDate),
+        totalDocuments: preview.totalDocuments,
+        totalPages: preview.totalPages,
+        tier1Pages: preview.tier1Pages,
+        tier1Rate: preview.tier1Rate,
+        tier1Amount: preview.tier1Amount,
+        tier2Pages: preview.tier2Pages,
+        tier2Rate: preview.tier2Rate,
+        tier2Amount: preview.tier2Amount,
+        totalAmount: preview.totalAmount,
+        status: 'pending_pay',
+        createdBy: uid,
+        createdAt: new Date(),
+      });
+
+      const saved = await queryRunner.manager.save(BillingLiquidation, liquidation);
+
+      await queryRunner.manager
+        .createQueryBuilder()
+        .update(BillingMetadata)
+        .set({
+          billingStatus: 'pending_pay',
+          billingId: saved.id,
+          billingMarkedAt: new Date(),
+          billingMarkedBy: uid,
+        })
+        .where('created_at <= :cutoff', { cutoff: new Date(preview.cutoffDate) })
+        .andWhere('(billing_status IS NULL OR billing_status = :status)', { status: 'unbilled' })
+        .execute();
+
+      await queryRunner.commitTransaction();
+
+      await this.sendLiquidationNotification({
+        tenantId: tid,
+        userId: uid,
+        liquidationId: saved.id,
+        cutoffDate: preview.cutoffDate,
+        totalDocuments: preview.totalDocuments,
+        totalPages: preview.totalPages,
+        totalAmount: preview.totalAmount,
+      });
+
+      return { ok: true, liquidationId: saved.id, ...preview, status: 'pending_pay' };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async listLiquidations(tenantId: string): Promise<any[]> {
+    const rows = await this.billingLiquidationRepo.find({
+      where: { tenantId: String(tenantId || '').trim() || 'default-tenant' },
+      order: { createdAt: 'DESC' },
+      take: 200,
+    });
+
+    return rows.map((r) => ({
+      id: r.id,
+      cutoffDate: r.cutoffDate,
+      totalDocuments: r.totalDocuments,
+      totalPages: r.totalPages,
+      totalAmount: Number(r.totalAmount || 0),
+      status: r.status,
+      createdBy: r.createdBy,
+      createdAt: r.createdAt,
+      paidAt: r.paidAt,
+    }));
+  }
+
+  async markLiquidationPay(tenantId: string, userId: string, billingId: number): Promise<any> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    const uid = String(userId || '').trim() || 'system';
+
+    const row = await this.billingLiquidationRepo.findOne({ where: { id: Number(billingId || 0), tenantId: tid } });
+    if (!row) throw new Error(`No existe billing ${billingId}`);
+
+    row.status = 'pay';
+    row.paidAt = new Date();
+    await this.billingLiquidationRepo.save(row);
+
+    await this.billingRepo
+      .createQueryBuilder()
+      .update(BillingMetadata)
+      .set({ billingStatus: 'pay', billingMarkedAt: new Date(), billingMarkedBy: uid })
+      .where('billing_id = :billingId', { billingId: row.id })
+      .andWhere('billing_status = :status', { status: 'pending_pay' })
+      .execute();
+
+    return { ok: true, id: row.id, status: row.status, paidAt: row.paidAt };
+  }
+
+  async exportLiquidationCsv(tenantId: string, billingId: number): Promise<string> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    const id = Number(billingId || 0);
+
+    const row = await this.billingLiquidationRepo.findOne({ where: { id, tenantId: tid } });
+    if (!row) throw new Error(`No existe billing ${billingId}`);
+
+    const records = await this.billingRepo.find({ where: { billingId: id }, order: { createdAt: 'DESC' } });
+
+    const header = 'id,document_id,filename,extracted_pages,billing_status,billing_id,created_at';
+    const csvRows = records.map((r) => {
+      const filename = String(r.filename || '').replace(/"/g, '""');
+      const docId = String(r.documentId || '').replace(/"/g, '""');
+      const createdAt = r.createdAt?.toISOString?.() || '';
+      return `${r.id},"${docId}","${filename}",${Number(r.extractedPages || 0)},${String(r.billingStatus || '')},${Number(r.billingId || 0)},${createdAt}`;
+    });
+
+    return [header, ...csvRows].join('\n');
+  }
+
+  private resolveCutoffDate(cutoffDate: string): Date {
+    const raw = String(cutoffDate || '').trim();
+    if (!raw) throw new Error('cutoffDate es obligatorio');
+    const base = new Date(`${raw}T23:59:59.999Z`);
+    if (Number.isNaN(base.getTime())) throw new Error('cutoffDate inválido');
+    return base;
+  }
+
+  private async getActiveRateConfig(tenantId: string): Promise<BillingRateConfig> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    let rate = await this.billingRateRepo.findOne({
+      where: { tenantId: tid, isActive: true },
+      order: { effectiveFrom: 'DESC', id: 'DESC' },
+    });
+
+    if (rate) return rate;
+
+    rate = this.billingRateRepo.create({
+      tenantId: tid,
+      tier1LimitPages: 1_000_000,
+      tier1Rate: 80,
+      tier2Rate: 60,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: 'system',
+      createdAt: new Date(),
+    });
+
+    return this.billingRateRepo.save(rate);
+  }
+
+  private async sendLiquidationNotification(input: {
+    tenantId: string;
+    userId: string;
+    liquidationId: number;
+    cutoffDate: string;
+    totalDocuments: number;
+    totalPages: number;
+    totalAmount: number;
+  }): Promise<void> {
+    const integrationsBaseUrl = String(process.env.INTEGRATIONS_BASE_URL || '').trim();
+    const integrationsApiKey = String(process.env.INTEGRATIONS_API_KEY || '').trim();
+    const recipientsCsv = String(process.env.BILLING_LIQUIDATION_NOTIFY_TO || 'admin@siriscloud.com.co').trim();
+
+    if (!integrationsBaseUrl || !integrationsApiKey) {
+      this.logger.warn('No hay INTEGRATIONS_BASE_URL/INTEGRATIONS_API_KEY para notificación de liquidación');
+      return;
+    }
+
+    const recipients = Array.from(new Set(recipientsCsv.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)));
+    if (!recipients.length) return;
+
+    const integrationsBase = integrationsBaseUrl.replace(/\/$/, '');
+    const integrationsPath = '/email/liquidation-notice';
+    const integrationsUrl = integrationsBase.endsWith('/api')
+      ? `${integrationsBase}${integrationsPath}`
+      : `${integrationsBase}/api${integrationsPath}`;
+
+    const resp = await fetch(integrationsUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': integrationsApiKey,
+      },
+      body: JSON.stringify({
+        recipients,
+        tenantId: input.tenantId,
+        liquidationId: input.liquidationId,
+        userId: input.userId,
+        cutoffDate: input.cutoffDate,
+        totalDocuments: input.totalDocuments,
+        totalPages: input.totalPages,
+        totalAmount: input.totalAmount,
+      }),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      this.logger.error(`Error enviando notificación de liquidación ${input.liquidationId}: ${resp.status} ${text}`);
+      return;
+    }
+
+    this.logger.log(`Notificación de liquidación enviada id=${input.liquidationId} recipients=${recipients.length}`);
   }
 
   private async getOrCreateConfig(tenantId: string): Promise<BillingConfig> {

@@ -110,6 +110,22 @@ export class BillingComponent implements OnInit {
     });
   }
 
+  exportPreviewLog(): void {
+    this.billingService.exportPreviewCsv(this.token, this.cutoffDate).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `billing-preview-${this.cutoffDate}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.error = 'No se pudo exportar el log del preview.';
+      },
+    });
+  }
+
   loadLiquidations(): void {
     this.billingService.listLiquidations(this.token).subscribe({
       next: (rows) => {

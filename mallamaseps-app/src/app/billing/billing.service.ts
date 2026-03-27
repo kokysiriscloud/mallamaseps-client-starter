@@ -114,6 +114,11 @@ export class BillingService {
     return this.http.post<BillingLiquidationPreview>(`${this.apiUrl}/liquidations/preview`, { cutoffDate }, { headers });
   }
 
+  exportPreviewCsv(token: string, cutoffDate: string): Observable<Blob> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/liquidations/preview/export`, { cutoffDate }, { headers, responseType: 'blob' });
+  }
+
   createLiquidation(token: string, cutoffDate: string): Observable<any> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
     return this.http.post<any>(`${this.apiUrl}/liquidations`, { cutoffDate }, { headers });

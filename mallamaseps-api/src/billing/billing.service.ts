@@ -453,6 +453,28 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return { ok: true, id: row.id, status: row.status, paidAt: row.paidAt };
   }
 
+  async exportPreviewCsv(tenantId: string, cutoffDate: string): Promise<string> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    const cutoff = this.resolveCutoffDate(cutoffDate);
+
+    const records = await this.billingRepo
+      .createQueryBuilder('b')
+      .where('b.createdAt <= :cutoff', { cutoff })
+      .andWhere('(b.billingStatus IS NULL OR b.billingStatus = :status)', { status: 'unbilled' })
+      .orderBy('b.createdAt', 'DESC')
+      .getMany();
+
+    const header = 'id,document_id,filename,extracted_pages,billing_status,billing_id,created_at';
+    const csvRows = records.map((r) => {
+      const filename = String(r.filename || '').replace(/"/g, '""');
+      const docId = String(r.documentId || '').replace(/"/g, '""');
+      const createdAt = r.createdAt?.toISOString?.() || '';
+      return `${r.id},"${docId}","${filename}",${Number(r.extractedPages || 0)},${String(r.billingStatus || 'unbilled')},${Number(r.billingId || 0)},${createdAt}`;
+    });
+
+    return [header, ...csvRows].join('\n');
+  }
+
   async exportLiquidationCsv(tenantId: string, billingId: number): Promise<string> {
     const tid = String(tenantId || '').trim() || 'default-tenant';
     const id = Number(billingId || 0);

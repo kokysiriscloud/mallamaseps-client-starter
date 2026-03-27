@@ -80,6 +80,20 @@ export class BillingController {
     return this.billingService.previewLiquidation(tenantId, body?.cutoffDate);
   }
 
+  @Post('liquidations/preview/export')
+  @Header('Content-Type', 'text/csv')
+  async exportPreviewCsv(
+    @Req() req: Request & { user?: any },
+    @Body() body: { cutoffDate: string },
+    @Res() res: Response,
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const cutoffDate = String(body?.cutoffDate || '').trim() || 'cutoff';
+    const csv = await this.billingService.exportPreviewCsv(tenantId, cutoffDate);
+    res.setHeader('Content-Disposition', `attachment; filename="billing-preview-${cutoffDate}.csv"`);
+    res.send(csv);
+  }
+
   @Post('liquidations')
   liquidate(
     @Req() req: Request & { user?: any },

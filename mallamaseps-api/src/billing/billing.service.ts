@@ -219,12 +219,14 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const statusSummary: BillingStatusSummary[] = [
+    const statusSummarySeed: BillingStatusSummary[] = [
       { status: 'all', label: 'Todos', documents: 0, pages: 0, amount: 0 },
       { status: 'unbilled', label: 'Sin liquidar', documents: 0, pages: 0, amount: 0 },
       { status: 'pending_pay', label: 'Pendiente pago', documents: 0, pages: 0, amount: 0 },
       { status: 'pay', label: 'Pagado', documents: 0, pages: 0, amount: 0 },
-    ].map((item) => {
+    ];
+
+    const statusSummary: BillingStatusSummary[] = statusSummarySeed.map((item) => {
       if (item.status === 'all') return item;
       const totals = statusMap.get(item.status) || { documents: 0, pages: 0 };
       return {

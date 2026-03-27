@@ -25,8 +25,18 @@ export class SessionService {
   private load(): Session | null {
     const raw = localStorage.getItem('siriscloud_auth_session');
     if (!raw) return null;
+
     try {
-      return JSON.parse(raw) as Session;
+      const parsed = JSON.parse(raw) as any;
+      const token = String(parsed?.token || parsed?.accessToken || parsed?.access_token || '').trim();
+
+      if (!token) return null;
+
+      return {
+        token,
+        user: parsed?.user || { email: '', role: 'user' },
+        tenant: parsed?.tenant || { name: '', domain: '' },
+      } as Session;
     } catch {
       return null;
     }

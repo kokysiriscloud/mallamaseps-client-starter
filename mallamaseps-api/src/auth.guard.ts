@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'node:crypto';
 
 export interface TokenPayload {
@@ -15,6 +15,7 @@ export interface TokenPayload {
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly secret: string;
+  private readonly logger = new Logger('AuthGuard');
 
   constructor() {
     this.secret = process.env.JWT_ACCESS_SECRET ?? 'dev-secret-access';
@@ -25,6 +26,7 @@ export class AuthGuard implements CanActivate {
     const authHeader = String(request.headers?.authorization || '');
 
     if (!authHeader.toLowerCase().startsWith('bearer ')) {
+      this.logger.warn('401 sin header Bearer');
       throw new UnauthorizedException('Token JWT requerido');
     }
 
@@ -35,20 +37,34 @@ export class AuthGuard implements CanActivate {
 
   private verifyAccessToken(token: string): TokenPayload {
     const [body, signature] = String(token).split('.');
-    if (!body || !signature) throw new UnauthorizedException('Token inválido');
+    if (!body || !signature) {
+      this.logger.warn('401 token sin formato esperado body.signature');
+      throw new UnauthorizedException('Token inválido');
+    }
 
     const expected = crypto.createHmac('sha256', this.secret).update(body).digest('base64url');
-    if (signature !== expected) throw new UnauthorizedException('Token inválido');
+    if (signature !== expected) {
+      this.logger.warn('401 firma JWT inválida');
+      throw new UnauthorizedException('Token inválido');
+    }
 
     let payload: TokenPayload;
     try {
       payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as TokenPayload;
     } catch {
+      this.logger.warn('401 payload JWT inválido (JSON)');
       throw new UnauthorizedException('Token inválido');
     }
 
-    if (payload.kind !== 'access') throw new UnauthorizedException('Token inválido');
-    if (!payload.exp || Date.now() > payload.exp) throw new UnauthorizedException('Token expirado');
+    if (payload.kind !== 'access') {
+      this.logger.warn(`401 kind inválido: ${String(payload.kind || '')}`);
+      throw new UnauthorizedException('Token inválido');
+    }
+
+    if (!payload.exp || Date.now() > payload.exp) {
+      this.logger.warn('401 token expirado');
+      throw new UnauthorizedException('Token expirado');
+    }
 
     return payload;
   }

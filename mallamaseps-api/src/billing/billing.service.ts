@@ -660,6 +660,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('No hay AUTH_BASE_URL/AUTH_INTERNAL_API_KEY para resolver tenantName en notificación de liquidación');
     }
 
+    const csv = await this.exportLiquidationCsv(input.tenantId, input.liquidationId);
+    const csvBase64 = Buffer.from(csv, 'utf8').toString('base64');
     const integrationsBase = integrationsBaseUrl.replace(/\/$/, '');
     const integrationsPath = '/email/liquidation-notice';
     const integrationsUrl = integrationsBase.endsWith('/api')
@@ -682,6 +684,13 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         totalDocuments: input.totalDocuments,
         totalPages: input.totalPages,
         totalAmount: input.totalAmount,
+        attachments: [
+          {
+            filename: `billing-liquidation-${input.liquidationId}.csv`,
+            contentType: 'text/csv',
+            base64: csvBase64,
+          },
+        ],
       }),
     });
 

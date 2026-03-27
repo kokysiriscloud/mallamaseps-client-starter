@@ -9,21 +9,17 @@ declare global {
 
 const runtimeConfig = window.__APP_CONFIG__ || {};
 
-function resolveAuthApiUrl(authPortalUrl: string, explicit?: string): string {
+function resolveAuthApiUrl(explicit?: string): string {
   const fromRuntime = String(explicit || '').trim();
   if (fromRuntime) return fromRuntime;
 
-  try {
-    const parsed = new URL(authPortalUrl);
-    return `${parsed.origin}/api/auth`;
-  } catch {
-    return 'http://localhost:3000/api/auth';
-  }
+  // Default explícito al servicio auth API para evitar apuntar al portal por error.
+  return 'http://localhost:3000/api/auth';
 }
 
 const authPortalUrl = runtimeConfig.authPortalUrl || 'http://localhost:4200/login';
 
 export const environment = {
   authPortalUrl,
-  authApiUrl: resolveAuthApiUrl(authPortalUrl, runtimeConfig.authApiUrl),
+  authApiUrl: resolveAuthApiUrl(runtimeConfig.authApiUrl),
 };

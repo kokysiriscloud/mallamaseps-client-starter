@@ -2,12 +2,28 @@ declare global {
   interface Window {
     __APP_CONFIG__?: {
       authPortalUrl?: string;
+      authApiUrl?: string;
     };
   }
 }
 
 const runtimeConfig = window.__APP_CONFIG__ || {};
 
+function resolveAuthApiUrl(authPortalUrl: string, explicit?: string): string {
+  const fromRuntime = String(explicit || '').trim();
+  if (fromRuntime) return fromRuntime;
+
+  try {
+    const parsed = new URL(authPortalUrl);
+    return `${parsed.origin}/api/auth`;
+  } catch {
+    return 'http://localhost:3000/api/auth';
+  }
+}
+
+const authPortalUrl = runtimeConfig.authPortalUrl || 'http://localhost:4200/login';
+
 export const environment = {
-  authPortalUrl: runtimeConfig.authPortalUrl || 'http://localhost:4200/login',
+  authPortalUrl,
+  authApiUrl: resolveAuthApiUrl(authPortalUrl, runtimeConfig.authApiUrl),
 };

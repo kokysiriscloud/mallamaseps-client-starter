@@ -17,6 +17,12 @@ export class BillingConfig {
   @Column({ name: 'critical_percent', type: 'int', default: 100 })
   criticalPercent: number;
 
+  @Column({ name: 'last_warning_notified_period', type: 'varchar', nullable: true })
+  lastWarningNotifiedPeriod: string | null;
+
+  @Column({ name: 'last_critical_notified_period', type: 'varchar', nullable: true })
+  lastCriticalNotifiedPeriod: string | null;
+
   @Column({ name: 'updated_at', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { BillingMetadata } from '../usage/billing-metadata.entity';
@@ -46,13 +46,44 @@ export interface DailyDetail {
 }
 
 @Injectable()
-export class BillingService {
+export class BillingService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger('BillingService');
+  private alertsInterval: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     @InjectRepository(BillingMetadata)
     private readonly billingRepo: Repository<BillingMetadata>,
     @InjectRepository(BillingConfig)
     private readonly billingConfigRepo: Repository<BillingConfig>,
   ) {}
+
+  onModuleInit(): void {
+    const enabled = String(process.env.USAGE_ALERTS_JOB_ENABLED ?? 'true').toLowerCase() === 'true';
+    if (!enabled) {
+      this.logger.warn('USAGE_ALERTS_JOB_ENABLED=false. Job de alertas deshabilitado.');
+      return;
+    }
+
+    const everyMs = Math.max(60_000, Number(process.env.USAGE_ALERTS_JOB_INTERVAL_MS || 600_000));
+    this.alertsInterval = setInterval(() => {
+      this.runUsageAlertsJob().catch((error) => {
+        this.logger.error(`Error en job de alertas: ${error?.message || error}`);
+      });
+    }, everyMs);
+
+    this.logger.log(`Job de alertas de uso iniciado cada ${everyMs}ms`);
+
+    this.runUsageAlertsJob().catch((error) => {
+      this.logger.error(`Error en ejecución inicial de alertas: ${error?.message || error}`);
+    });
+  }
+
+  onModuleDestroy(): void {
+    if (this.alertsInterval) {
+      clearInterval(this.alertsInterval);
+      this.alertsInterval = null;
+    }
+  }
 
   async getSummary(tenantId: string): Promise<BillingSummary> {
     const now = new Date();
@@ -219,10 +250,161 @@ export class BillingService {
       budgetLimitPages: 200_000,
       warningPercent: 80,
       criticalPercent: 100,
+      lastWarningNotifiedPeriod: null,
+      lastCriticalNotifiedPeriod: null,
       updatedAt: new Date(),
     });
 
     return this.billingConfigRepo.save(config);
+  }
+
+  private async runUsageAlertsJob(): Promise<void> {
+    const configs = await this.billingConfigRepo.find();
+    if (!configs.length) return;
+
+    const now = new Date();
+    const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const totalsRaw = await this.billingRepo
+      .createQueryBuilder('b')
+      .select('COALESCE(SUM(b.extractedPages), 0)', 'totalPages')
+      .where('b.createdAt >= :start AND b.createdAt <= :end', {
+        start: startOfMonth,
+        end: endOfMonth,
+      })
+      .getRawOne();
+
+    const usedPages = parseInt(totalsRaw?.totalPages || '0', 10) || 0;
+
+    for (const config of configs) {
+      const limitPages = Math.max(1, Number(config.budgetLimitPages || 1));
+      const usagePercent = (usedPages / limitPages) * 100;
+
+      if (
+        usagePercent >= Number(config.criticalPercent || 100) &&
+        config.lastCriticalNotifiedPeriod !== periodKey
+      ) {
+        const ok = await this.sendUsageAlertNotification({
+          tenantId: config.tenantId,
+          period: periodKey,
+          severity: 'critical',
+          threshold: Number(config.criticalPercent || 100),
+          usagePercent,
+          usedPages,
+          limitPages,
+        });
+
+        if (ok) {
+          config.lastCriticalNotifiedPeriod = periodKey;
+          if (!config.lastWarningNotifiedPeriod) {
+            config.lastWarningNotifiedPeriod = periodKey;
+          }
+          config.updatedAt = new Date();
+          await this.billingConfigRepo.save(config);
+        }
+
+        continue;
+      }
+
+      if (
+        usagePercent >= Number(config.warningPercent || 80) &&
+        config.lastWarningNotifiedPeriod !== periodKey
+      ) {
+        const ok = await this.sendUsageAlertNotification({
+          tenantId: config.tenantId,
+          period: periodKey,
+          severity: 'warning',
+          threshold: Number(config.warningPercent || 80),
+          usagePercent,
+          usedPages,
+          limitPages,
+        });
+
+        if (ok) {
+          config.lastWarningNotifiedPeriod = periodKey;
+          config.updatedAt = new Date();
+          await this.billingConfigRepo.save(config);
+        }
+      }
+    }
+  }
+
+  private async sendUsageAlertNotification(input: {
+    tenantId: string;
+    period: string;
+    severity: 'warning' | 'critical';
+    threshold: number;
+    usagePercent: number;
+    usedPages: number;
+    limitPages: number;
+  }): Promise<boolean> {
+    const authBaseUrl = String(process.env.AUTH_BASE_URL || '').trim();
+    const authInternalKey = String(process.env.AUTH_INTERNAL_API_KEY || '').trim();
+    const integrationsBaseUrl = String(process.env.INTEGRATIONS_BASE_URL || '').trim();
+    const integrationsApiKey = String(process.env.INTEGRATIONS_API_KEY || '').trim();
+
+    if (!authBaseUrl || !authInternalKey || !integrationsBaseUrl || !integrationsApiKey) {
+      this.logger.warn('Variables faltantes para enviar alertas (AUTH_BASE_URL, AUTH_INTERNAL_API_KEY, INTEGRATIONS_BASE_URL, INTEGRATIONS_API_KEY)');
+      return false;
+    }
+
+    const usersResp = await fetch(
+      `${authBaseUrl.replace(/\/$/, '')}/auth/internal/tenants/${encodeURIComponent(input.tenantId)}/users-emails`,
+      {
+        method: 'GET',
+        headers: {
+          'x-internal-key': authInternalKey,
+        },
+      },
+    );
+
+    if (!usersResp.ok) {
+      const text = await usersResp.text().catch(() => '');
+      this.logger.error(`No se pudieron obtener usuarios del tenant ${input.tenantId}: ${usersResp.status} ${text}`);
+      return false;
+    }
+
+    const usersJson: any = await usersResp.json().catch(() => ({ emails: [] }));
+    const recipients = Array.from(
+      new Set((usersJson?.emails || []).map((x: any) => String(x || '').trim().toLowerCase()).filter(Boolean)),
+    );
+
+    if (!recipients.length) {
+      this.logger.warn(`Tenant ${input.tenantId} sin correos para alertas`);
+      return false;
+    }
+
+    const sendResp = await fetch(`${integrationsBaseUrl.replace(/\/$/, '')}/email/usage-alert`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': integrationsApiKey,
+      },
+      body: JSON.stringify({
+        recipients,
+        tenantId: input.tenantId,
+        period: input.period,
+        usagePercent: input.usagePercent,
+        threshold: input.threshold,
+        severity: input.severity,
+        usedPages: input.usedPages,
+        limitPages: input.limitPages,
+      }),
+    });
+
+    if (!sendResp.ok) {
+      const text = await sendResp.text().catch(() => '');
+      this.logger.error(`Error enviando alerta ${input.severity} tenant ${input.tenantId}: ${sendResp.status} ${text}`);
+      return false;
+    }
+
+    this.logger.log(
+      `Alerta ${input.severity} enviada tenant=${input.tenantId} percent=${input.usagePercent.toFixed(2)} threshold=${input.threshold}`,
+    );
+
+    return true;
   }
 
   async exportCsv(): Promise<string> {

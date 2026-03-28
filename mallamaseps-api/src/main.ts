@@ -30,7 +30,7 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: ['http://localhost:4200', 'http://localhost:4300'], credentials: true });
+  app.enableCors({ origin: ['http://localhost:4200', 'http://localhost:4300', 'https://api-auth.siriscloud.com.co', 'https://mallamaseps.siriscloud.com.co'], credentials: true });
   await app.listen(process.env.PORT ?? 3100);
 }
 bootstrap();

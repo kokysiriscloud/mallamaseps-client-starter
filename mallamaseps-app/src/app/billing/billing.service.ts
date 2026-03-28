@@ -84,7 +84,7 @@ export interface BillingLiquidationItem {
 @Injectable({ providedIn: 'root' })
 export class BillingService {
   private http = inject(HttpClient);
-  private apiUrl = 'https://api.siriscloud.com.co/api/billing';
+  private apiUrl = 'https://api-mallamaseps.siriscloud.com.co/api/billing';
 
   getSummary(token: string, billingStatus: BillingStatusFilter = 'unbilled'): Observable<BillingSummary> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });

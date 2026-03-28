@@ -18,7 +18,7 @@ function resolveAuthApiUrl(explicit?: string): string {
   // return 'http://localhost:3000/api/auth';
 }
 
-const authPortalUrl = runtimeConfig.authPortalUrl || 'http://localhost:4200/login';
+const authPortalUrl = runtimeConfig.authPortalUrl || 'https://auth.siriscloud.com.co/login';
 
 export const environment = {
   authPortalUrl,

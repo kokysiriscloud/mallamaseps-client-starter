@@ -10,6 +10,10 @@ types.setTypeParser(1114, (str: string) => new Date(str + 'Z'));
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('HTTP');
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.use((req: any, res: any, next: any) => {
     const started = Date.now();
@@ -30,7 +34,13 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api');
-  app.enableCors({ origin: ['http://localhost:4200', 'http://localhost:4300', 'https://api-auth.siriscloud.com.co', 'https://mallamaseps.siriscloud.com.co'], credentials: true });
+  app.enableCors({
+    origin:
+      corsOrigins.length > 0
+        ? corsOrigins
+        : ['http://localhost:4200', 'http://localhost:4300', 'https://mallamaseps.siriscloud.com.co'],
+    credentials: true,
+  });
   await app.listen(process.env.PORT ?? 3100);
 }
 bootstrap();

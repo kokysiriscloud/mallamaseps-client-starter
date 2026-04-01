@@ -42,9 +42,9 @@ export class BillingController {
   @Get('export')
   @Header('Content-Type', 'text/csv')
   async exportCsv(
+    @Res() res: Response,
     @Query('billingStatus') billingStatus = 'unbilled',
     @Query('period') period?: string,
-    @Res() res: Response,
   ) {
     const month = formatPeriodSlug(period);
     const normalized = ['all', 'unbilled', 'pending_pay', 'pay'].includes(String(billingStatus))

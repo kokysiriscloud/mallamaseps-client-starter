@@ -30,7 +30,24 @@
             </div>
           </div>
           <div class="flex items-center gap-3">
-            <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                class="w-6 h-6 rounded-full border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-xs transition-colors"
+                aria-label="Mes anterior"
+                (click)="previousPeriod()">
+                ←
+              </button>
+              <span class="text-xs text-slate-500 px-2 py-1 rounded border border-slate-700">{{ data.period }}</span>
+              <button
+                type="button"
+                class="w-6 h-6 rounded-full border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-xs transition-colors"
+                aria-label="Mes siguiente"
+                [disabled]="!canGoNextPeriod()"
+                (click)="nextPeriod()">
+                →
+              </button>
+            </div>
             <button
               type="button"
               class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"

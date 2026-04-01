@@ -36,6 +36,7 @@ export interface BillingStatusSummary {
 
 export interface BillingSummary {
   period: string;
+  periodKey: string;
   selectedStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay';
   totalDocuments: number;
   totalPages: number;
@@ -128,14 +129,19 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
   async getSummary(
     tenantId: string,
     billingStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay' = 'unbilled',
+    periodKey?: string,
   ): Promise<BillingSummary> {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const startOfMonth = new Date(year, month, 1);
-    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    const {
+      startOfMonth,
+      endOfMonth,
+      year,
+      month,
+      lastDay,
+      periodLabel,
+      periodKey: resolvedPeriodKey,
+      referenceDate,
+    } = this.resolvePeriod(periodKey);
 
-    const period = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
     const selectedStatus = billingStatus;
 
     const totalsQuery = this.billingRepo
@@ -199,11 +205,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const totalDocuments = parseInt(totalsRaw?.totalDocuments || '0', 10) || 0;
     const totalPages = parseInt(totalsRaw?.totalPages || '0', 10) || 0;
 
-    // Days until month resets
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const resetsIn = lastDay - now.getDate();
+    const resetsIn = Math.max(0, lastDay - referenceDate.getDate());
 
-    // Fill all days of the month (so the chart has no gaps)
     const dailyMap = new Map<string, DailyUsage>();
     for (const row of dailyRaw) {
       dailyMap.set(row.date, {
@@ -254,7 +257,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     const capBreakdown = this.calculateTierBreakdown(config.budgetLimitPages, rate);
 
     return {
-      period,
+      period: periodLabel,
+      periodKey: resolvedPeriodKey,
       selectedStatus,
       totalDocuments,
       totalPages,
@@ -273,6 +277,52 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         criticalPercent: config.criticalPercent,
       },
       daily,
+    };
+  }
+
+  private resolvePeriod(period?: string): {
+    startOfMonth: Date;
+    endOfMonth: Date;
+    year: number;
+    month: number;
+    lastDay: number;
+    periodLabel: string;
+    periodKey: string;
+    referenceDate: Date;
+  } {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+
+    if (period) {
+      const match = /^(\d{4})-(\d{1,2})$/.exec(period.trim());
+      if (match) {
+        const parsedYear = Number(match[1]);
+        const parsedMonth = Number(match[2]) - 1;
+        if (!Number.isNaN(parsedYear) && parsedMonth >= 0 && parsedMonth < 12) {
+          year = parsedYear;
+          month = parsedMonth;
+        }
+      }
+    }
+
+    const startOfMonth = new Date(year, month, 1);
+    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const sameMonth = year === now.getFullYear() && month === now.getMonth();
+    const referenceDate = sameMonth ? now : endOfMonth;
+    const periodLabel = startOfMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const periodKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    return {
+      startOfMonth,
+      endOfMonth,
+      year,
+      month,
+      lastDay,
+      periodLabel,
+      periodKey,
+      referenceDate,
     };
   }
 
@@ -884,10 +934,8 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  async exportCsv(billingStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay' = 'unbilled'): Promise<string> {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  async exportCsv(billingStatus: 'all' | 'unbilled' | 'pending_pay' | 'pay' = 'unbilled', periodKey?: string): Promise<string> {
+    const { startOfMonth, endOfMonth } = this.resolvePeriod(periodKey);
 
     const query = this.billingRepo.createQueryBuilder('b').where('b.createdAt >= :start AND b.createdAt <= :end', {
       start: startOfMonth,

@@ -25,6 +25,8 @@ export class UsageComponent implements OnInit, OnDestroy {
   autoRefreshSeconds = 30;
   lastUpdated: Date | null = null;
   selectedStatus: BillingStatusFilter = 'unbilled';
+  periodCursor = new Date();
+  private readonly periodFormatter = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' });
 
   private autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private autoRefreshCountdownTimer: ReturnType<typeof setInterval> | null = null;
@@ -83,10 +85,56 @@ export class UsageComponent implements OnInit, OnDestroy {
     return this.data?.statusSummary || [];
   }
 
+  private get periodParam(): string {
+    const year = this.periodCursor.getFullYear();
+    const month = this.periodCursor.getMonth() + 1;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+
+  private syncPeriodFromSummary(summary: BillingSummary): void {
+    const parsed = this.parsePeriodKey(summary.periodKey);
+    if (parsed) {
+      this.periodCursor = parsed;
+    }
+  }
+
+  private parsePeriodKey(key?: string): Date | null {
+    if (!key) return null;
+    const [yearStr, monthStr] = key.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    if (month < 1 || month > 12) return null;
+    return new Date(year, month - 1, 1);
+  }
+
+  previousPeriod(): void {
+    this.periodCursor = new Date(this.periodCursor.getFullYear(), this.periodCursor.getMonth() - 1, 1);
+    this.selectedDay = null;
+    this.detail = null;
+    this.reloadSummary();
+  }
+
+  nextPeriod(): void {
+    if (!this.canGoNextPeriod()) return;
+    this.periodCursor = new Date(this.periodCursor.getFullYear(), this.periodCursor.getMonth() + 1, 1);
+    this.selectedDay = null;
+    this.detail = null;
+    this.reloadSummary();
+  }
+
+  canGoNextPeriod(): boolean {
+    const now = new Date();
+    return (
+      this.periodCursor.getFullYear() < now.getFullYear() ||
+      (this.periodCursor.getFullYear() === now.getFullYear() && this.periodCursor.getMonth() < now.getMonth())
+    );
+  }
+
   private reloadSummary(silent = false): void {
     if (!silent) this.loading = true;
 
-    this.billingService.getSummary(this.token, this.selectedStatus).subscribe({
+    this.billingService.getSummary(this.token, this.selectedStatus, this.periodParam).subscribe({
       next: (d) => {
         const alerts = d.alerts ?? { warningPercent: 80, criticalPercent: 100 };
         this.data = { ...d, alerts };
@@ -96,6 +144,9 @@ export class UsageComponent implements OnInit, OnDestroy {
         this.error = null;
         this.lastUpdated = new Date();
         this.autoRefreshSeconds = 30;
+        this.syncPeriodFromSummary(d);
+        this.selectedDay = null;
+        this.detail = null;
       },
       error: () => {
         this.error = 'No se pudo cargar la información de consumo.';
@@ -165,14 +216,13 @@ export class UsageComponent implements OnInit, OnDestroy {
   }
 
   exportCsv(): void {
-    this.billingService.exportCsv(this.token, this.selectedStatus).subscribe({
+    this.billingService.exportCsv(this.token, this.selectedStatus, this.periodParam).subscribe({
       next: (blob) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const now = new Date();
-        const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
-        a.download = `usage-${this.selectedStatus}-${month}.csv`;
+        const label = (this.data?.period ?? this.periodFormatter.format(this.periodCursor)).replace(' ', '-');
+        a.download = `usage-${this.selectedStatus}-${label}.csv`;
         a.click();
         URL.revokeObjectURL(url);
       },

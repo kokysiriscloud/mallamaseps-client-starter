@@ -3,6 +3,24 @@ import type { Request, Response } from 'express';
 import { BillingService } from './billing.service';
 import { AuthGuard } from '../auth.guard';
 
+function formatPeriodSlug(period?: string): string {
+  if (period) {
+    const match = /^(\d{4})-(\d{1,2})$/.exec(period.trim());
+    if (match) {
+      const year = Number(match[1]);
+      const monthIndex = Number(match[2]) - 1;
+      if (!Number.isNaN(year) && monthIndex >= 0 && monthIndex < 12) {
+        const date = new Date(year, monthIndex, 1);
+        if (!Number.isNaN(date.getTime())) {
+          return date.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+        }
+      }
+    }
+  }
+  const now = new Date();
+  return now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+}
+
 @UseGuards(AuthGuard)
 @Controller('billing')
 export class BillingController {
@@ -12,27 +30,28 @@ export class BillingController {
   getSummary(
     @Req() req: Request & { user?: any },
     @Query('billingStatus') billingStatus = 'unbilled',
+    @Query('period') period?: string,
   ) {
     const tenantId = String(req?.user?.tid || 'default-tenant');
     const normalized = ['all', 'unbilled', 'pending_pay', 'pay'].includes(String(billingStatus))
       ? (String(billingStatus) as 'all' | 'unbilled' | 'pending_pay' | 'pay')
       : 'unbilled';
-    return this.billingService.getSummary(tenantId, normalized);
+    return this.billingService.getSummary(tenantId, normalized, period);
   }
 
   @Get('export')
   @Header('Content-Type', 'text/csv')
   async exportCsv(
     @Query('billingStatus') billingStatus = 'unbilled',
+    @Query('period') period?: string,
     @Res() res: Response,
   ) {
-    const now = new Date();
-    const month = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '-');
+    const month = formatPeriodSlug(period);
     const normalized = ['all', 'unbilled', 'pending_pay', 'pay'].includes(String(billingStatus))
       ? String(billingStatus)
       : 'unbilled';
     res.setHeader('Content-Disposition', `attachment; filename="usage-${normalized}-${month}.csv"`);
-    const csv = await this.billingService.exportCsv(normalized as 'all' | 'unbilled' | 'pending_pay' | 'pay');
+    const csv = await this.billingService.exportCsv(normalized as 'all' | 'unbilled' | 'pending_pay' | 'pay', period);
     res.send(csv);
   }
 

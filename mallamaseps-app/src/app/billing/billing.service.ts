@@ -25,6 +25,7 @@ export interface BillingStatusSummary {
 
 export interface BillingSummary {
   period: string;
+  periodKey: string;
   selectedStatus: BillingStatusFilter;
   totalDocuments: number;
   totalPages: number;
@@ -86,9 +87,10 @@ export class BillingService {
   private http = inject(HttpClient);
   private apiUrl = 'https://api-mallamaseps.siriscloud.com.co/api/billing';
 
-  getSummary(token: string, billingStatus: BillingStatusFilter = 'unbilled'): Observable<BillingSummary> {
+  getSummary(token: string, billingStatus: BillingStatusFilter = 'unbilled', period?: string): Observable<BillingSummary> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-    const params = new HttpParams().set('billingStatus', billingStatus);
+    let params = new HttpParams().set('billingStatus', billingStatus);
+    if (period) params = params.set('period', period);
     return this.http.get<BillingSummary>(this.apiUrl, { headers, params });
   }
 
@@ -102,9 +104,10 @@ export class BillingService {
     return this.http.put<UsageAlerts>(`${this.apiUrl}/alerts`, alerts, { headers });
   }
 
-  exportCsv(token: string, billingStatus: BillingStatusFilter = 'unbilled'): Observable<Blob> {
+  exportCsv(token: string, billingStatus: BillingStatusFilter = 'unbilled', period?: string): Observable<Blob> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
-    const params = new HttpParams().set('billingStatus', billingStatus);
+    let params = new HttpParams().set('billingStatus', billingStatus);
+    if (period) params = params.set('period', period);
     return this.http.get(`${this.apiUrl}/export`, { headers, params, responseType: 'blob' });
   }
 

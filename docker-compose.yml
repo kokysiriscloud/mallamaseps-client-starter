@@ -1,0 +1,58 @@
+name: mallamaseps
+
+services:
+  api:
+    build:
+      context: ./mallamaseps-api
+      target: dev
+    env_file:
+      - ./mallamaseps-api/.env
+    environment:
+      NODE_ENV: development
+      PORT: 3100
+      # Los bind mounts de macOS no propagan inotify: tsc --watch necesita polling
+      TSC_WATCHFILE: PriorityPollingInterval
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./mallamaseps-api:/app
+      # node_modules vive dentro del contenedor (linux), no se pisa con el del host (macOS)
+      - api_node_modules:/app/node_modules
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ./mallamaseps-app
+      target: dev
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./mallamaseps-app:/app
+      - app_node_modules:/app/node_modules
+    restart: unless-stopped
+
+  # Postgres local opcional: solo arranca con `docker compose --profile local-db up`
+  # Por defecto el API usa el DB_HOST del .env (la base remota).
+  db:
+    profiles: ["local-db"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./mallamaseps-api/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  api_node_modules:
+  app_node_modules:
+  db_data:

@@ -113,17 +113,21 @@ export class BillingComponent implements OnInit {
   exportPreviewLog(): void {
     this.billingService.exportPreviewCsv(this.token, this.cutoffDate).subscribe({
       next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `billing-preview-${this.cutoffDate}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        this.download(blob, `billing-preview-${this.cutoffDate}.csv`);
       },
       error: () => {
         this.error = 'No se pudo exportar el log del preview.';
       },
     });
+  }
+
+  private download(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   loadLiquidations(): void {
@@ -151,15 +155,24 @@ export class BillingComponent implements OnInit {
   exportLiquidation(row: BillingLiquidationItem): void {
     this.billingService.exportLiquidationCsv(this.token, row.id).subscribe({
       next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `billing-liquidation-${row.id}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        this.download(blob, `billing-liquidation-${row.id}.csv`);
       },
       error: () => {
         this.error = `No se pudo exportar liquidación ${row.id}.`;
+      },
+    });
+  }
+
+  exportLiquidationReport(row: BillingLiquidationItem): void {
+    this.billingService.exportLiquidationPdf(this.token, row.id).subscribe({
+      next: (blob) => {
+        this.download(blob, `reporte-gastos-facturacion-${row.id}.pdf`);
+      },
+      error: (err) => {
+        this.error =
+          err?.status === 404
+            ? `El API desplegado no expone el reporte PDF todavía (404). Falta desplegar mallamaseps-api.`
+            : `No se pudo exportar el reporte PDF de la liquidación ${row.id}. (HTTP ${err?.status ?? '?'})`;
       },
     });
   }

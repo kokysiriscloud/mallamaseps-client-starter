@@ -5,6 +5,14 @@ import { BillingMetadata } from '../usage/billing-metadata.entity';
 import { BillingConfig } from './billing-config.entity';
 import { BillingLiquidation } from './billing-liquidation.entity';
 import { BillingRateConfig } from './billing-rate-config.entity';
+import {
+  BillingExpenseReport,
+  BillingReportCategory,
+  BillingReportDailyPoint,
+  formatBogotaTimestamp,
+  formatInt,
+  renderBillingExpenseReportPdf,
+} from './billing-report.renderer';
 
 export interface DailyUsage {
   date: string;       // YYYY-MM-DD
@@ -83,6 +91,9 @@ export interface BillingLiquidationPreview {
 
 @Injectable()
 export class BillingService implements OnModuleInit, OnModuleDestroy {
+  private static readonly REPORT_CATEGORY_LIMIT = 10;
+  private static readonly REPORT_MAX_DAILY_POINTS = 400;
+
   private readonly logger = new Logger('BillingService');
   private alertsInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -623,6 +634,139 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
 
     return [header, ...csvRows].join('\n');
+  }
+
+  async exportLiquidationPdf(tenantId: string, billingId: number): Promise<Buffer> {
+    const report = await this.buildLiquidationReport(tenantId, billingId);
+    return renderBillingExpenseReportPdf(report);
+  }
+
+  async buildLiquidationReport(tenantId: string, billingId: number): Promise<BillingExpenseReport> {
+    const tid = String(tenantId || '').trim() || 'default-tenant';
+    const id = Number(billingId || 0);
+
+    const row = await this.billingLiquidationRepo.findOne({ where: { id, tenantId: tid } });
+    if (!row) throw new Error(`No existe billing ${billingId}`);
+
+    const categoryExpr = this.categoryExpression();
+    const dateExpr = "TO_CHAR(b.created_at, 'YYYY-MM-DD')";
+
+    const [categoryRaw, dailyRaw] = await Promise.all([
+      this.billingRepo
+        .createQueryBuilder('b')
+        .select(categoryExpr, 'code')
+        .addSelect('COUNT(*)', 'documents')
+        .addSelect('COALESCE(SUM(b.extracted_pages), 0)', 'pages')
+        .where('b.billing_id = :id', { id })
+        .setParameter('categoryPattern', this.categoryPattern())
+        .groupBy(categoryExpr)
+        .getRawMany(),
+      this.billingRepo
+        .createQueryBuilder('b')
+        .select(dateExpr, 'date')
+        .addSelect('COALESCE(SUM(b.extracted_pages), 0)', 'pages')
+        .where('b.billing_id = :id', { id })
+        .groupBy(dateExpr)
+        .orderBy('date', 'ASC')
+        .getRawMany(),
+    ]);
+
+    const totalPages = Number(row.totalPages || 0);
+    const totalAmount = Number(row.totalAmount || 0);
+    const effectiveRate = totalPages > 0 ? totalAmount / totalPages : Number(row.tier1Rate || 80);
+
+    const categories = this.buildReportCategories(categoryRaw, effectiveRate);
+    const daily = this.buildReportDaily(dailyRaw, effectiveRate);
+
+    const cutoffDay = formatBogotaTimestamp(row.cutoffDate).slice(0, 10);
+    const tier2Pages = Number(row.tier2Pages || 0);
+
+    return {
+      liquidationId: row.id,
+      rangeStart: daily[0]?.date || cutoffDay,
+      rangeEnd: daily[daily.length - 1]?.date || cutoffDay,
+      totalDocuments: Number(row.totalDocuments || 0),
+      totalPages,
+      totalAmount,
+      rateLabel:
+        tier2Pages > 0
+          ? `$${formatInt(row.tier1Rate)} / $${formatInt(row.tier2Rate)} por página`
+          : `$${formatInt(row.tier1Rate)} por página`,
+      sourceFile: `billing-liquidation-${row.id}.csv`,
+      generatedAt: new Date(),
+      categories,
+      daily,
+    };
+  }
+
+  private buildReportCategories(raw: any[], ratePerPage: number): BillingReportCategory[] {
+    const rows: BillingReportCategory[] = raw
+      .map((r) => {
+        const pages = parseInt(r.pages, 10) || 0;
+        return {
+          code: String(r.code || 'SIN CAT').trim() || 'SIN CAT',
+          documents: parseInt(r.documents, 10) || 0,
+          pages,
+          amount: Math.round(pages * ratePerPage),
+        };
+      })
+      .sort((a, b) => b.amount - a.amount);
+
+    if (rows.length <= BillingService.REPORT_CATEGORY_LIMIT) return rows;
+
+    const top = rows.slice(0, BillingService.REPORT_CATEGORY_LIMIT);
+    const tail = rows.slice(BillingService.REPORT_CATEGORY_LIMIT);
+
+    top.push({
+      code: 'Otros',
+      documents: tail.reduce((sum, r) => sum + r.documents, 0),
+      pages: tail.reduce((sum, r) => sum + r.pages, 0),
+      amount: tail.reduce((sum, r) => sum + r.amount, 0),
+    });
+
+    return top;
+  }
+
+  /** Rellena los días sin movimiento en 0 para que la línea no comprima el tiempo. */
+  private buildReportDaily(raw: any[], ratePerPage: number): BillingReportDailyPoint[] {
+    const byDate = new Map<string, number>();
+    for (const r of raw) {
+      byDate.set(String(r.date), parseInt(r.pages, 10) || 0);
+    }
+
+    const dates = [...byDate.keys()].sort();
+    if (!dates.length) return [];
+
+    const points: BillingReportDailyPoint[] = [];
+    const cursor = new Date(`${dates[0]}T00:00:00Z`);
+    const last = new Date(`${dates[dates.length - 1]}T00:00:00Z`);
+
+    while (cursor <= last && points.length < BillingService.REPORT_MAX_DAILY_POINTS) {
+      const key = cursor.toISOString().slice(0, 10);
+      const pages = byDate.get(key) ?? 0;
+      points.push({ date: key, pages, amount: Math.round(pages * ratePerPage) });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return points;
+  }
+
+  private categoryExpression(): string {
+    const columns: Record<string, string> = {
+      filename: 'b.filename',
+      document_id: 'b.document_id',
+      azure_model_id: 'b.azure_model_id',
+    };
+
+    const field = String(process.env.BILLING_REPORT_CATEGORY_FIELD || 'filename').trim();
+    const column = columns[field] || columns.filename;
+
+    // El CAST explícito evita la ambigüedad entre substring(text, text) y substring(text, int).
+    return `COALESCE(NULLIF(UPPER(SUBSTRING(${column} FROM CAST(:categoryPattern AS text))), ''), 'SIN CAT')`;
+  }
+
+  private categoryPattern(): string {
+    return String(process.env.BILLING_REPORT_CATEGORY_PATTERN || '^[A-Za-z]{2,6}').trim();
   }
 
   private resolveCutoffDate(cutoffDate: string): Date {

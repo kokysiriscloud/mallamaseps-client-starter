@@ -163,4 +163,18 @@ export class BillingController {
     res.setHeader('Content-Disposition', `attachment; filename="billing-liquidation-${id}.csv"`);
     res.send(csv);
   }
+
+  @Get('liquidations/:id/export/pdf')
+  @Header('Content-Type', 'application/pdf')
+  async exportLiquidationPdf(
+    @Req() req: Request & { user?: any },
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const tenantId = String(req?.user?.tid || 'default-tenant');
+    const pdf = await this.billingService.exportLiquidationPdf(tenantId, Number(id || 0));
+    res.setHeader('Content-Disposition', `attachment; filename="reporte-gastos-facturacion-${id}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.send(pdf);
+  }
 }

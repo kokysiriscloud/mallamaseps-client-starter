@@ -7,6 +7,15 @@ RUN npm install
 COPY . .
 RUN npm run build
 
+FROM node:22-alpine AS dev
+WORKDIR /app
+ENV NODE_ENV=development
+COPY package*.json ./
+RUN npm install
+COPY . .
+EXPOSE 3100
+CMD ["npm", "run", "start:dev"]
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

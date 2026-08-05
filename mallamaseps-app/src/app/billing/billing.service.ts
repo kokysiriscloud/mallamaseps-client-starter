@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../environment';
 
 export interface DailyUsage {
   date: string;
@@ -85,7 +86,7 @@ export interface BillingLiquidationItem {
 @Injectable({ providedIn: 'root' })
 export class BillingService {
   private http = inject(HttpClient);
-  private apiUrl = 'https://api-mallamaseps.siriscloud.com.co/api/billing';
+  private apiUrl = `${environment.mallamasepsApiUrl}/billing`;
 
   getSummary(token: string, billingStatus: BillingStatusFilter = 'unbilled', period?: string): Observable<BillingSummary> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
@@ -155,5 +156,10 @@ export class BillingService {
   exportLiquidationCsv(token: string, id: number): Observable<Blob> {
     const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/liquidations/${id}/export`, { headers, responseType: 'blob' });
+  }
+
+  exportLiquidationPdf(token: string, id: number): Observable<Blob> {
+    const headers = new HttpHeaders({ Authorization: `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/liquidations/${id}/export/pdf`, { headers, responseType: 'blob' });
   }
 }
